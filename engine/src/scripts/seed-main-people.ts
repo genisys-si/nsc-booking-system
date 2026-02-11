@@ -1,5 +1,5 @@
 //How to RUN THIS
-//npx ts-node src/scripts/seed-users.ts
+//npx ts-node src/scripts/seed-main-people.ts
 import dbConnect from "@/lib/db";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";

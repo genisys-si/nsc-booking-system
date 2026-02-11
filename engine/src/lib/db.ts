@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/nsc-booking-system';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://nsc_db_user:lNaxc7vT8UKxSaP3@cluster0.qjvekwi.mongodb.net/?appName=Cluster0';
 
 if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');

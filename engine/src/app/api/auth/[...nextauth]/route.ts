@@ -38,6 +38,11 @@ export const authOptions = {
           return null;
         }
 
+        // SUCCESSFUL LOGIN → update lastLogin
+        await User.findByIdAndUpdate(user._id, {
+          $set: { lastLogin: new Date() },
+        });
+
         // Return user object (without password!)
         return {
           id: user._id.toString(),

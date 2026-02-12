@@ -4,11 +4,12 @@ import dbConnect from '@/lib/db';
 import Booking from '@/models/Booking';
 import Facility from '@/models/Facility';
 import { isVenueAvailable } from '@/lib/availability';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'; // your NextAuth config
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  // Allow public/unauthenticated requests → pending status (optional: require login later)
+  // Allow public/unauthenticated requests → pending status
+  // Uncomment next line if you want to force login
   // if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
     contactName,
     contactEmail,
     notes,
+    selectedAmenities = [], // array of amenity _ids chosen by user
   } = body;
 
   if (!facilityId || !venueId || !startTime || !endTime) {
@@ -52,9 +54,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Time slot overlaps with existing booking' }, { status: 409 });
   }
 
-  // Create pending booking
+  // ───────────────────────────────────────────────
+  // Pricing calculation
+  // ───────────────────────────────────────────────
+  const durationMs = end.getTime() - start.getTime();
+  const hours = durationMs / (1000 * 60 * 60); // duration in hours
+
+  const basePrice = hours * (venue.pricePerHour || 0);
+
+  // Calculate surcharge for selected amenities
+  let amenitySurcharge = 0;
+  const validSelectedAmenities: string[] = [];
+
+  if (selectedAmenities.length > 0 && venue.amenities?.length > 0) {
+    for (const amenityId of selectedAmenities) {
+      const amenity = venue.amenities.id(amenityId);
+      if (amenity && amenity.surcharge) {
+        amenitySurcharge += amenity.surcharge;
+        validSelectedAmenities.push(amenityId);
+      }
+    }
+  }
+
+  const totalPrice = basePrice + amenitySurcharge;
+
+  // Create pending booking with pricing info
   const booking = await Booking.create({
-    userId: session?.user?.id || null, // null if public submission
+    userId: session?.user?.id || null,
     facilityId,
     venueId,
     startTime: start,
@@ -65,12 +91,26 @@ export async function POST(req: NextRequest) {
     contactEmail,
     notes,
     status: 'pending',
+    //pricing fields
+    selectedAmenities: validSelectedAmenities,
+    basePrice,
+    amenitySurcharge,
+    totalPrice,
+    invoiceId: `INV-${Date.now().toString(36).toUpperCase()}`, // short unique ID
   });
 
   return NextResponse.json({
     success: true,
     bookingId: booking._id,
     message: 'Booking request submitted (pending approval)',
+    // Useful for frontend preview
+    pricing: {
+      hours: hours.toFixed(2),
+      basePrice: basePrice.toFixed(2),
+      amenitySurcharge: amenitySurcharge.toFixed(2),
+      totalPrice: totalPrice.toFixed(2),
+      currency: 'SBD',
+    },
   }, { status: 201 });
 }
 
@@ -93,9 +133,16 @@ export async function GET(req: NextRequest) {
     filter.userId = session.user.id;
   }
   // admin → no filter
-
   const bookings = await Booking.find(filter)
     .populate('userId', 'name email')
+    .populate({
+      path: 'facilityId',
+      select: 'name',
+    })
+    .populate({
+      path: 'venueId',
+      select: 'name pricePerHour',
+    })
     .sort({ startTime: -1 })
     .lean();
 

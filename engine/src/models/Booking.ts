@@ -7,6 +7,11 @@ export interface IBooking extends Document {
   startTime: Date;
   endTime: Date;
   status: 'pending' | 'confirmed' | 'cancelled' | 'rejected';
+  amenities?: mongoose.Types.ObjectId[]; // array of amenity _ids
+  basePrice?: number;  // calculated base (hours * pricePerHour)
+  amenitySurcharge?: number;  //sum of amenity surcharges
+  totalPrice?: number;  // base + surcharge
+  invoiceId?: string;  //unique ID for receipt
   purpose?: string;
   attendees?: number;
   contactName?: string;
@@ -26,6 +31,11 @@ const bookingSchema = new Schema<IBooking>({
   contactName: String,
   contactEmail:String,
   notes:       String,
+  amenities: [{ type: Schema.Types.ObjectId, ref: 'Amenity' }],  
+  basePrice: { type: Number, default: 0 },  // calculated base (hours * pricePerHour)
+  amenitySurcharge: { type: Number, default: 0 },  //sum of amenity surcharges
+  totalPrice: { type: Number, default: 0 },  // base + surcharge
+  invoiceId: String,  //unique ID for receipt
 }, { timestamps: true });
 
 // Index for fast overlap queries

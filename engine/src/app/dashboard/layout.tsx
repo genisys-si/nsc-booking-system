@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import Sidebar from "@/components/dashboard/sidebar";
+import 'leaflet/dist/leaflet.css';
 
 export default async function DashboardLayout({
   children,

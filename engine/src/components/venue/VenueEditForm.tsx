@@ -1,4 +1,4 @@
-// src/components/venue/VenueAddForm.tsx
+// src/components/venue/VenueEditForm.tsx
 "use client";
 
 import { useState } from "react";
@@ -23,7 +23,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Trash2, Plus, Upload } from "lucide-react";
 
 // ───────────────────────────────────────────────
-// Zod schema for venue
+// Zod schema
 // ───────────────────────────────────────────────
 const amenitySchema = z.object({
   name: z.string().min(1, "Amenity name is required"),
@@ -37,34 +37,53 @@ const formSchema = z.object({
   pricePerHour: z.coerce.number().min(0, "Price cannot be negative"),
   isBookable: z.boolean().default(false),
   amenities: z.array(amenitySchema).optional(),
-  images: z.any().array().optional(), // File[] – handled manually
+  images: z.any().array().optional(), // new File[]
 });
 
 type VenueFormValues = z.infer<typeof formSchema>;
 
-interface VenueAddFormProps {
+interface VenueEditFormProps {
+  venue: {
+    _id: string;
+    name: string;
+    capacity?: number;
+    pricePerHour: number;
+    isBookable: boolean;
+    amenities: Array<{ name: string; description?: string; surcharge: number }>;
+    images: string[]; // existing image paths from DB
+  };
   facilityId: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function VenueAddForm({
+export function VenueEditForm({
+  venue,
   facilityId,
   onSuccess,
   onCancel,
-}: VenueAddFormProps) {
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+}: VenueEditFormProps) {
+  // Existing images from DB as initial previews
+  const [imagePreviews, setImagePreviews] = useState<string[]>(
+    venue.images
+      .filter(img => img && typeof img === "string" && img.trim() !== "")
+      .map(img => (img.startsWith("http") || img.startsWith("/") ? img : `/uploads/venues/${img}`))
+  );
+
+  // Track which existing images were deleted (to send to backend for disk deletion)
+  const [deletedImages, setDeletedImages] = useState<string[]>([]);
+
   const [uploading, setUploading] = useState(false);
 
   const form = useForm<VenueFormValues>({
-    resolver: zodResolver(formSchema) as any, // reliable workaround for complex schema inference
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
-      name: "",
-      capacity: 0,
-      pricePerHour: 0,
-      isBookable: false,
-      amenities: [],
-      images: [],
+      name: venue.name,
+      capacity: venue.capacity,
+      pricePerHour: venue.pricePerHour,
+      isBookable: venue.isBookable,
+      amenities: venue.amenities || [],
+      images: [], // only NEW uploads go here
     },
     mode: "onChange",
   });
@@ -77,7 +96,7 @@ export function VenueAddForm({
   const isSubmitting = form.formState.isSubmitting;
 
   // ───────────────────────────────────────────────
-  // Handle multiple image upload + preview
+  // Handle new image uploads
   // ───────────────────────────────────────────────
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -88,15 +107,33 @@ export function VenueAddForm({
       newPreviews.push(URL.createObjectURL(file));
     }
 
-    setImagePreviews((prev) => [...prev, ...newPreviews]);
+    setImagePreviews(prev => [...prev, ...newPreviews]);
 
-    // Append files to form value
     const current = form.getValues("images") || [];
     form.setValue("images", [...current, ...Array.from(files)]);
   };
 
   // ───────────────────────────────────────────────
-  // Submit handler – sends FormData with facilityId
+  // Remove image (existing or new)
+  // ───────────────────────────────────────────────
+  const removeImage = (index: number) => {
+    const removedSrc = imagePreviews[index];
+
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+
+    // If it's an existing image (from DB)
+    if (index < venue.images.length) {
+      setDeletedImages(prev => [...prev, removedSrc]);
+    } else {
+      // New upload – remove from form value
+      const currentNew = form.getValues("images") || [];
+      const newIndex = index - venue.images.length;
+      form.setValue("images", currentNew.filter((_, i) => i !== newIndex));
+    }
+  };
+
+  // ───────────────────────────────────────────────
+  // Submit – send new data + deleted images list
   // ───────────────────────────────────────────────
   async function onSubmit(values: VenueFormValues) {
     setUploading(true);
@@ -112,10 +149,13 @@ export function VenueAddForm({
       formData.append("capacity", values.capacity.toString());
     }
 
-    // Amenities – send as JSON string
+    // Amenities
     formData.append("amenities", JSON.stringify(values.amenities || []));
 
-    // Images – append each file
+    // Deleted existing images (for backend to remove from disk)
+    formData.append("deletedImages", JSON.stringify(deletedImages));
+
+    // New images only
     if (values.images && values.images.length > 0) {
       values.images.forEach((file: File) => {
         formData.append("images", file);
@@ -123,20 +163,20 @@ export function VenueAddForm({
     }
 
     try {
-      const res = await fetch("/api/venues", {
-        method: "POST",
+      const res = await fetch(`/api/venues/${venue._id}`, {
+        method: "PATCH",
         body: formData,
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to create venue");
+        throw new Error(err.error || "Failed to update venue");
       }
 
-      toast.success("Venue created successfully");
+      toast.success("Venue updated successfully");
       onSuccess?.();
     } catch (err: any) {
-      toast.error("Creation failed", {
+      toast.error("Update failed", {
         description: err.message || "Something went wrong",
       });
     } finally {
@@ -149,7 +189,7 @@ export function VenueAddForm({
       <CardContent className="pt-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* ─── Basic Info ─── */}
+            {/* Name, Capacity, Price, Bookable – same as add form */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -158,7 +198,7 @@ export function VenueAddForm({
                   <FormItem>
                     <FormLabel>Venue Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Main Pitch" {...field} disabled={isSubmitting} />
+                      <Input {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -170,14 +210,9 @@ export function VenueAddForm({
                 name="capacity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Capacity (people) – optional</FormLabel>
+                    <FormLabel>Capacity (optional)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="150"
-                        {...field}
-                        disabled={isSubmitting}
-                      />
+                      <Input type="number" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -193,13 +228,7 @@ export function VenueAddForm({
                   <FormItem>
                     <FormLabel>Price per Hour (SBD)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="50.00"
-                        {...field}
-                        disabled={isSubmitting}
-                      />
+                      <Input type="number" step="0.01" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -212,9 +241,9 @@ export function VenueAddForm({
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 mt-8">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Bookable by public</FormLabel>
+                      <FormLabel className="text-base">Bookable</FormLabel>
                       <p className="text-sm text-muted-foreground">
-                        Allow users to book this venue
+                        Allow public booking
                       </p>
                     </div>
                     <FormControl>
@@ -229,7 +258,7 @@ export function VenueAddForm({
               />
             </div>
 
-            {/* ─── Amenities (dynamic array) ─── */}
+            {/* Amenities – same as add */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium">Amenities</h3>
@@ -320,7 +349,7 @@ export function VenueAddForm({
               )}
             </div>
 
-            {/* ─── Images Upload ─── */}
+            {/* Images Section */}
             <div className="space-y-4">
               <FormLabel>Venue Images</FormLabel>
               <div className="border-2 border-dashed rounded-lg p-6 text-center">
@@ -330,37 +359,35 @@ export function VenueAddForm({
                   multiple
                   onChange={handleImageChange}
                   className="hidden"
-                  id="venue-images"
+                  id="venue-images-edit"
                   disabled={isSubmitting}
                 />
-                <label htmlFor="venue-images" className="cursor-pointer">
+                <label htmlFor="venue-images-edit" className="cursor-pointer">
                   <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-medium">Click to upload or drag & drop</p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG, max 5MB per image</p>
+                  <p className="mt-2 text-sm font-medium">Add more images</p>
                 </label>
               </div>
 
-              {imagePreviews.length > 0 && (
+              {imagePreviews.length > 0 ? (
                 <div className="grid grid-cols-3 gap-4 mt-4">
                   {imagePreviews.map((src, idx) => (
                     <div key={idx} className="relative group">
                       <Image
                         src={src}
-                        alt={`preview ${idx + 1}`}
+                        alt={`image ${idx + 1}`}
                         width={200}
                         height={150}
                         className="rounded-md object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "/placeholder-image.jpg"; // fallback
+                        }}
                       />
                       <Button
                         type="button"
                         variant="destructive"
                         size="icon"
                         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100"
-                        onClick={() => {
-                          setImagePreviews(prev => prev.filter((_, i) => i !== idx));
-                          const current = form.getValues("images") || [];
-                          form.setValue("images", current.filter((_, i) => i !== idx));
-                        }}
+                        onClick={() => removeImage(idx)}
                         disabled={isSubmitting}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -368,10 +395,14 @@ export function VenueAddForm({
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic mt-4">
+                  No images yet
+                </p>
               )}
             </div>
 
-            {/* ─── Submit Buttons ─── */}
+            {/* Submit */}
             <div className="flex justify-end gap-4 pt-6 border-t">
               <Button
                 type="button"
@@ -383,7 +414,7 @@ export function VenueAddForm({
               </Button>
 
               <Button type="submit" disabled={isSubmitting || uploading}>
-                {isSubmitting || uploading ? "Creating..." : "Create Venue"}
+                {isSubmitting || uploading ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </form>

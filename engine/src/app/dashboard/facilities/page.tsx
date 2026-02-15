@@ -60,7 +60,7 @@ export default async function FacilitiesPage() {
                   />
                 </div>
               ) : (
-                <div className="h-48 w-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                <div className="h-48 w-full bg-linear-to-br from-gray-100 to-gray-200 flex items-center justify-center">
                   <Building2 className="h-16 w-16 text-muted-foreground/50" />
                 </div>
               )}

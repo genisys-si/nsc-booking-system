@@ -1,5 +1,13 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IStatusHistory {
+  status: 'pending' | 'confirmed' | 'cancelled' | 'rejected';
+  changedBy: mongoose.Types.ObjectId;
+  changedAt: Date;
+  reason?: string;
+}
+
+
 export interface IBooking extends Document {
   userId: mongoose.Types.ObjectId;
   facilityId: mongoose.Types.ObjectId;
@@ -17,26 +25,70 @@ export interface IBooking extends Document {
   contactName?: string;
   contactEmail?: string;
   notes?: string;
+  statusHistory: IStatusHistory[];
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+  paymentMethod?: string;     // "cash", "bank_transfer", "online", etc.
+  paidAmount?: number;
+  paymentDate?: Date;
+  transactionId?: string;     // for future gateway (Stripe, PayPal, etc.)
 }
 
+
+
+
 const bookingSchema = new Schema<IBooking>({
-  userId:      { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  facilityId:  { type: Schema.Types.ObjectId, ref: 'Facility', required: true },
-  venueId:     { type: Schema.Types.ObjectId, required: true },
-  startTime:   { type: Date, required: true },
-  endTime:     { type: Date, required: true },
-  status:      { type: String, enum: ['pending','confirmed','cancelled','rejected'], default: 'pending' },
-  purpose:     String,
-  attendees:   Number,
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  facilityId: { type: Schema.Types.ObjectId, ref: 'Facility', required: true },
+  venueId: { type: Schema.Types.ObjectId, required: true },
+  startTime: { type: Date, required: true },
+  endTime: { type: Date, required: true },
+  status: { type: String, enum: ['pending', 'confirmed', 'cancelled', 'rejected'], default: 'pending' },
+  purpose: String,
+  attendees: Number,
   contactName: String,
-  contactEmail:String,
-  notes:       String,
-  amenities: [{ type: Schema.Types.ObjectId, ref: 'Amenity' }],  
+  contactEmail: String,
+  notes: String,
+  amenities: [{ type: Schema.Types.ObjectId, ref: 'Amenity' }],
   basePrice: { type: Number, default: 0 },  // calculated base (hours * pricePerHour)
   amenitySurcharge: { type: Number, default: 0 },  //sum of amenity surcharges
   totalPrice: { type: Number, default: 0 },  // base + surcharge
   invoiceId: String,  //unique ID for receipt
+  statusHistory: [{
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'cancelled', 'rejected'],
+      required: true,
+    },
+    changedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    reason: {
+      type: String,
+      trim: true,
+    },
+  }],
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending',
+  },
+  paymentMethod: String,
+  paidAmount: Number,
+  paymentDate: Date,
+  transactionId: String,
+  
 }, { timestamps: true });
+
+
+
+// Index for faster queries on status changes
+bookingSchema.index({ "statusHistory.changedAt": -1 });
 
 // Index for fast overlap queries
 bookingSchema.index({ venueId: 1, startTime: 1, endTime: 1 });

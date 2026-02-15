@@ -1,0 +1,332 @@
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import dbConnect from "@/lib/db";
+import Booking from "@/models/Booking";
+import Facility from "@/models/Facility";
+import { notFound } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Calendar, DollarSign, User, Phone, Mail, FileText, History, CheckCircle2, XCircle, Ban } from "lucide-react";
+import Link from "next/link";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import BookingActions from "@/components/booking/BookingActions";
+
+export default async function BookingDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return <div className="p-8 text-center">Please sign in to view booking details</div>;
+  }
+
+  await dbConnect();
+
+  const params = await paramsPromise;
+  const bookingRaw = await Booking.findById((await params).id)
+    .populate("userId", "name email")
+    .populate("facilityId", "name venues amenities") // Include venues + amenities for lookup
+    .lean();
+
+  if (!bookingRaw) notFound();
+
+  const booking = {
+    ...bookingRaw,
+    _id: bookingRaw._id.toString(),
+    startTime: bookingRaw.startTime.toISOString(),
+    endTime: bookingRaw.endTime.toISOString(),
+    createdAt: bookingRaw.createdAt.toISOString(),
+    updatedAt: bookingRaw.updatedAt?.toISOString(),
+    paymentDate: bookingRaw.paymentDate?.toISOString(),
+    statusHistory: bookingRaw.statusHistory?.map((h: any) => ({
+      status: h.status,
+      changedBy: h.changedBy.toString(),
+      changedAt: h.changedAt.toISOString(),
+      reason: h.reason,
+    })) || [],
+  };
+
+  // Fetch venue name + selected amenities
+  let venueName = "—";
+  let selectedAmenities: { name: string; surcharge: number }[] = [];
+  let amenityTotal = booking.amenitySurcharge || 0;
+
+  console.log(booking);
+
+  if (booking.facilityId) {
+    const facility = booking.facilityId; // already populated
+    const venue = facility.venues?.find((v: any) => v._id.toString() === booking.venueId);
+    venueName = venue?.name || "—";
+
+    // Match selected amenities from booking to venue's amenities
+    if (booking.selectedAmenities?.length > 0 && venue?.amenities?.length > 0) {
+      selectedAmenities = booking.selectedAmenities
+        .map((amenId: string) => {
+          const amenity = venue.amenities.find((a: any) => a._id.toString() === amenId);
+          return amenity ? { name: amenity.name, surcharge: amenity.surcharge || 0 } : null;
+        })
+        .filter(Boolean) as { name: string; surcharge: number }[];
+    }
+  }
+
+  const isAuthorized = session.user.role === "admin" || session.user.role === "manager";
+
+
+  return (
+    <div className="container mx-auto py-10 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" asChild>
+            <Link href="/dashboard/bookings">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-3xl font-bold">Booking Details</h1>
+        </div>
+
+        <div className="flex gap-3">
+          <Badge variant={
+            booking.status === "confirmed" ? "default" :
+            booking.status === "pending" ? "secondary" :
+            "destructive"
+          }>
+            {booking.status.toUpperCase()}
+          </Badge>
+
+          <Badge variant={
+            booking.paymentStatus === "paid" ? "default" :
+            booking.paymentStatus === "pending" ? "secondary" :
+            "destructive"
+          }>
+            Payment: {booking.paymentStatus?.toUpperCase() || "PENDING"}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Main Info Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left - Core Details */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Booking Information</CardTitle>
+            <CardDescription>Invoice #{booking.invoiceId || "—"}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Facility</p>
+                <p className="font-medium">{booking.facilityId?.name || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Venue</p>
+                <p className="font-medium">{venueName}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Start Time</p>
+                <p className="font-medium">{format(new Date(booking.startTime), "PPP p")}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">End Time</p>
+                <p className="font-medium">{format(new Date(booking.endTime), "PPP p")}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Created</p>
+                <p className="font-medium">{format(new Date(booking.createdAt), "PPP p")}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Last Updated</p>
+                <p className="font-medium">{booking.updatedAt ? format(new Date(booking.updatedAt), "PPP p") : "—"}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-semibold">Customer Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Name</p>
+                  <p className="font-medium">{booking.contactName || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="font-medium">{booking.contactEmail || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Attendees</p>
+                  <p className="font-medium">{booking.attendees ?? "—"}</p>
+                </div>
+              </div>
+            </div>
+
+            {(booking.purpose || booking.notes) && (
+              <div className="space-y-4">
+                <h3 className="font-semibold">Additional Info</h3>
+                {booking.purpose && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Purpose</p>
+                    <p>{booking.purpose}</p>
+                  </div>
+                )}
+                {booking.notes && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Notes</p>
+                    <p className="whitespace-pre-wrap">{booking.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Amenities + Charges Breakdown */}
+            <div className="space-y-6">
+              <h3 className="font-semibold">Selected Amenities & Charges</h3>
+
+              {selectedAmenities.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedAmenities.map((am, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded-md bg-muted/50">
+                        <span className="font-medium">{am.name}</span>
+                        <span className="text-green-600">+${am.surcharge.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <div className="flex justify-between text-sm">
+                      <span>Base Price (Venue Rate × Hours):</span>
+                      <span>${booking.basePrice?.toFixed(2) || "0.00"} SBD</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span>Amenities Surcharge:</span>
+                      <span>${amenityTotal.toFixed(2)} SBD</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg mt-4 pt-2 border-t">
+                      <span>Grand Total:</span>
+                      <span>${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <p>No amenities selected for this booking</p>
+                  <p className="text-sm mt-1">
+                    Base Price: ${booking.basePrice?.toFixed(2) || "0.00"} SBD  
+                    → Total: ${booking.totalPrice?.toFixed(2) || "0.00"} SBD
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right - Payment & Status Summary */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span>Total Amount:</span>
+                <span className="font-bold">${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Status:</span>
+                <Badge variant={
+                  booking.paymentStatus === "paid" ? "default" :
+                  booking.paymentStatus === "pending" ? "secondary" :
+                  "destructive"
+                }>
+                  {booking.paymentStatus?.toUpperCase() || "PENDING"}
+                </Badge>
+              </div>
+              {booking.paymentStatus === "paid" && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span>Paid Amount:</span>
+                    <span>${booking.paidAmount?.toFixed(2) || "0.00"} SBD</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Method:</span>
+                    <span className="capitalize">{booking.paymentMethod || "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Paid On:</span>
+                    <span>{booking.paymentDate ? format(new Date(booking.paymentDate), "PPP p") : "—"}</span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Badge variant={
+                  booking.status === "confirmed" ? "default" :
+                  booking.status === "pending" ? "secondary" :
+                  "destructive"
+                } className="text-lg px-4 py-1">
+                  {booking.status.toUpperCase()}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Action Buttons */}
+          {isAuthorized && (
+                        <BookingActions
+                            bookingId={booking._id}
+                            paymentStatus={booking.paymentStatus}
+                            isAuthorized={isAuthorized}
+                        />
+                    )}
+        </div>
+      </div>
+
+      {/* Status History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Status History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {booking.statusHistory.length === 0 ? (
+            <p className="text-muted-foreground italic text-center py-8">
+              No status changes recorded yet
+            </p>
+          ) : (
+            <div className="space-y-6">
+              {booking.statusHistory.map((entry: any, index: number) => (
+                <div key={index} className="relative pl-8 border-l-2 border-muted">
+                  <div className="absolute -left-2 top-1.5 w-4 h-4 rounded-full bg-primary" />
+                  <div className="flex items-center gap-3 mb-1">
+                    <Badge variant={
+                      entry.status === "confirmed" ? "default" :
+                      entry.status === "pending" ? "secondary" :
+                      "destructive"
+                    }>
+                      {entry.status.toUpperCase()}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {format(new Date(entry.changedAt), "PPP p")}
+                    </span>
+                  </div>
+                  {entry.reason && (
+                    <p className="text-sm text-muted-foreground">
+                      Reason: {entry.reason}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ import BookingFilters from "@/components/dashboard/BookingFilters";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { Suspense } from "react";
 
 export default async function BookingsPage({
   searchParams: searchParamsPromise,
@@ -106,14 +107,16 @@ export default async function BookingsPage({
         </Button>
       </div>
 
-      <BookingFilters venueOptions={venueOptions} />
+      <Suspense fallback={<div className="h-10 bg-muted animate-pulse rounded-md" />}>
+        <BookingFilters venueOptions={venueOptions} />
+      </Suspense>
 
       {bookings.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           No bookings found matching the filters.
         </div>
       ) : (
-        <DataTable columns={columns} data={bookings} />
+        <DataTable columns={columns} data={bookings}  />
       )}
     </div>
   );

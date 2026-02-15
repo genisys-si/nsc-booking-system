@@ -47,7 +47,7 @@ const venueSchema = new Schema<IVenue>({
   pricePerHour: { type: Number, default: 0 },
   pricePerDay: { type: Number, default: 0 },
   images: [{                    
-    type: String,               //"/uploads/venues/uuid-filename.jpg"
+    type: String,               
     alt: String,                
   }],
   createdAt: { type: Date, default: Date.now },

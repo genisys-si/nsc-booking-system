@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
+import { Eye } from "lucide-react";
+import Link from "next/link";
 
 export type BookingRow = {
   _id: string;
@@ -33,12 +35,30 @@ export type BookingRow = {
   totalPrice?: number;
   invoiceId?: string;
   createdAt: string;
+  statusHistory?: {
+    status: string;
+    changedBy: string;
+    changedAt: string;
+    reason?: string;
+  }[];
+  paymentStatus?: string;          
+  paymentMethod?: string;
+  paidAmount?: number;
+  paymentDate?: string;
 };
 
 export const columns: ColumnDef<BookingRow>[] = [
   {
     accessorKey: "invoiceId",
     header: "Invoice ID",
+    cell: ({ row }) => (
+    <Link
+      href={`/dashboard/bookings/${row.original._id}`}
+      className="text-primary hover:underline"
+    >
+      {row.original.invoiceId || "—"}
+    </Link>
+  ),
   },
   {
     accessorKey: "facilityId.name",
@@ -84,6 +104,15 @@ export const columns: ColumnDef<BookingRow>[] = [
     cell: ({ row }) => row.original.totalPrice?.toFixed(2) || "—",
   },
   {
+    accessorKey: "paymentStatus",
+    header: "Payment",
+    cell: ({ row }) => {
+      const status = row.original.paymentStatus || "pending";
+      const variant = status === "paid" ? "default" : "secondary";
+      return <Badge variant={variant}>{status}</Badge>;
+    },
+  },
+  {
     id: "actions",
     cell: ({ row }) => {
       const booking = row.original;
@@ -110,6 +139,49 @@ export const columns: ColumnDef<BookingRow>[] = [
         }
       };
 
+      const viewHistory = () => {
+        if (!booking.statusHistory || booking.statusHistory.length === 0) {
+          toast.info("No status history available");
+          return;
+        }
+
+        const historyText = booking.statusHistory
+          .map(h => `${new Date(h.changedAt).toLocaleString()} - ${h.status.toUpperCase()} by ${h.changedBy}${h.reason ? ` (${h.reason})` : ""}`)
+          .join("\n");
+
+        alert(`Status History:\n\n${historyText}`);
+      };
+
+      const markAsPaid = async (bookingId: string) => {
+        const amount = prompt("Enter paid amount (SBD):", booking.totalPrice?.toString() || "");
+        if (!amount) return;
+
+        const method = prompt("Payment method (cash / bank_transfer / other):", "cash") || "cash";
+
+        try {
+          const res = await fetch(`/api/bookings/${bookingId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "mark-paid",
+              paidAmount: parseFloat(amount),
+              paymentMethod: method,
+            }),
+          });
+
+          if (res.ok) {
+            toast.success("Payment marked as paid");
+            window.location.reload();
+          } else {
+            toast.error("Failed to update payment");
+          }
+        } catch (err) {
+          toast.error("Error");
+        }
+      };
+
+
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -121,6 +193,20 @@ export const columns: ColumnDef<BookingRow>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onClick={() => markAsPaid(booking._id)}
+              disabled={booking.paymentStatus === "paid"}
+            >
+              Mark as Paid
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={viewHistory}>
+              <Eye className="mr-2 h-4 w-4" />
+              View History
+            </DropdownMenuItem>
+
+
             {booking.status === "pending" && (
               <>
                 <DropdownMenuItem onClick={() => handleAction("confirm")}>

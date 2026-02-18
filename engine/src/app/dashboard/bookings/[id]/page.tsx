@@ -7,11 +7,12 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, DollarSign, User, Phone, Mail, FileText, History } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, User, Phone, Mail, FileText, History } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import BookingActions from "@/components/booking/BookingActions";
-
+import BookingApprovalActions from "@/components/booking/BookingApprovalActions";
+import BookingPaymentActions from "@/components/booking/BookingPaymentActions";
 
 
 export default async function BookingDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
 
   const bookingRaw = await Booking.findById(params.id)
     .populate("userId", "name email")
-    .populate("facilityId", "name venues amenities") 
+    .populate("facilityId", "name venues amenities")
     .lean();
 
   if (!bookingRaw) notFound();
@@ -49,6 +50,13 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
     })) || [],
   };
 
+  const plainPayments = booking.payments?.map((p: any) => ({
+  amount: p.amount,
+  method: p.method,
+  date: p.date.toISOString(), // or p.date.toString()
+  notes: p.notes || "",
+  recordedBy: p.recordedBy.toString(), // convert ObjectId to string
+})) || [];
 
 
   // Extract venue name + selected amenities with prices
@@ -57,11 +65,11 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
   let amenityTotal = booking.amenitySurcharge || 0;
 
   if (booking.facilityId) {
-    const facility = booking.facilityId; 
+    const facility = booking.facilityId;
     const venue = facility.venues?.find((v: any) => v._id.toString() === booking.venueId);
     venueName = venue?.name || "—";
 
-  console.log(venue)
+
 
     // Match only the amenities actually selected for this booking
     if (booking.selectedAmenities?.length > 0 && venue?.amenities?.length > 0) {
@@ -92,16 +100,16 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
         <div className="flex gap-3">
           <Badge variant={
             booking.status === "confirmed" ? "default" :
-            booking.status === "pending" ? "secondary" :
-            "destructive"
+              booking.status === "pending" ? "secondary" :
+                "destructive"
           }>
             {booking.status.toUpperCase()}
           </Badge>
 
           <Badge variant={
             booking.paymentStatus === "paid" ? "default" :
-            booking.paymentStatus === "pending" ? "secondary" :
-            "destructive"
+              booking.paymentStatus === "pending" ? "secondary" :
+                "destructive"
           }>
             Payment: {booking.paymentStatus?.toUpperCase() || "PENDING"}
           </Badge>
@@ -242,8 +250,8 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
                 <span>Status:</span>
                 <Badge variant={
                   booking.paymentStatus === "paid" ? "default" :
-                  booking.paymentStatus === "pending" ? "secondary" :
-                  "destructive"
+                    booking.paymentStatus === "pending" ? "secondary" :
+                      "destructive"
                 }>
                   {booking.paymentStatus?.toUpperCase() || "PENDING"}
                 </Badge>
@@ -276,8 +284,8 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
               <div className="flex items-center gap-3">
                 <Badge variant={
                   booking.status === "confirmed" ? "default" :
-                  booking.status === "pending" ? "secondary" :
-                  "destructive"
+                    booking.status === "pending" ? "secondary" :
+                      "destructive"
                 } className="text-lg px-4 py-1">
                   {booking.status.toUpperCase()}
                 </Badge>
@@ -287,6 +295,31 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
 
           {/* Action Buttons */}
           {isAuthorized && (
+            <div className="space-y-4">
+
+              <BookingApprovalActions
+                bookingId={booking._id}
+                currentStatus={booking.status}
+                paymentStatus={booking.paymentStatus}
+                isAuthorized={isAuthorized}
+              />
+
+              <BookingPaymentActions
+                bookingId={booking._id}
+                paymentStatus={booking.paymentStatus}
+                totalPrice={booking.totalPrice}
+                totalPaid={booking.totalPaid || 0}
+                remainingBalance={booking.remainingBalance || booking.totalPrice}
+                payments={plainPayments}
+                isAuthorized={isAuthorized}
+              />
+
+
+            </div>
+
+          )}
+
+          {isAuthorized && (
             <BookingActions
               bookingId={booking._id}
               paymentStatus={booking.paymentStatus}
@@ -295,6 +328,42 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {booking.payments?.length === 0 ? (
+            <p className="text-muted-foreground text-center py-6">No payments recorded yet</p>
+          ) : (
+            <div className="space-y-4">
+              {booking.payments?.map((p: any, index: number) => (
+                <div key={index} className="border-l-4 border-primary pl-4 py-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium">SBD {p.amount.toFixed(2)}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {format(new Date(p.date), "PPP p")}
+                    </span>
+                  </div>
+                  <p className="text-sm">Method: {p.method}</p>
+                  {p.notes && <p className="text-sm">Notes: {p.notes}</p>}
+                </div>
+              ))}
+              <div className="pt-4 border-t">
+                <div className="flex justify-between font-medium">
+                  <span>Total Paid:</span>
+                  <span>SBD {booking.totalPaid?.toFixed(2) || "0.00"}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span>Remaining:</span>
+                  <span>SBD {booking.remainingBalance?.toFixed(2) || "0.00"}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Status History */}
       <Card>
@@ -317,8 +386,8 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
                   <div className="flex items-center gap-3 mb-1">
                     <Badge variant={
                       entry.status === "confirmed" ? "default" :
-                      entry.status === "pending" ? "secondary" :
-                      "destructive"
+                        entry.status === "pending" ? "secondary" :
+                          "destructive"
                     }>
                       {entry.status.toUpperCase()}
                     </Badge>

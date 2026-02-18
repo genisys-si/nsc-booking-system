@@ -6,6 +6,15 @@ export interface IStatusHistory {
   changedAt: Date;
   reason?: string;
 }
+export interface IPayment {
+  amount: number;
+  method: string;           // "cash", "bank_transfer", "online", etc.
+  date: Date;
+  transactionId?: string;
+  notes?: string;
+  recordedBy: mongoose.Types.ObjectId; // who recorded it (admin/manager)
+}
+
 
 
 export interface IBooking extends Document {
@@ -26,6 +35,9 @@ export interface IBooking extends Document {
   contactEmail?: string;
   notes?: string;
   statusHistory: IStatusHistory[];
+  payments: IPayment[];     // ← new array for payment history
+  totalPaid: number;        // computed or stored sum of payments
+  remainingBalance?: number; // optional, can be computed as totalPrice - totalPaid
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   paymentMethod?: string;     // "cash", "bank_transfer", "online", etc.
   paidAmount?: number;
@@ -82,7 +94,18 @@ const bookingSchema = new Schema<IBooking>({
   paidAmount: Number,
   paymentDate: Date,
   transactionId: String,
-  
+  payments: [{
+    amount: { type: Number, required: true },
+    method: { type: String, required: true },
+    date: { type: Date, default: Date.now },
+    transactionId: String,
+    notes: String,
+    recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  }],
+
+  totalPaid: { type: Number, default: 0 },
+  remainingBalance: Number,
+
 }, { timestamps: true });
 
 

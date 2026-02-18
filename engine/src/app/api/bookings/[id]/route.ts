@@ -6,7 +6,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+   context : { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -15,10 +15,12 @@ export async function PATCH(
 
   await dbConnect();
 
+  const { id } = await context.params;
+
   const body = await req.json();
   const { action, reason, paymentMethod, paidAmount } = body;
 
-  const booking = await Booking.findById((await params).id);
+  const booking = await Booking.findById(id);
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }

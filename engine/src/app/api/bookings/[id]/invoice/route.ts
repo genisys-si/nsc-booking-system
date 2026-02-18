@@ -3,10 +3,12 @@ import dbConnect from '@/lib/db';
 import Booking from '@/models/Booking';
 import { generateInvoicePDF } from '@/lib/invoice';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await dbConnect();
 
-  const booking = await Booking.findById(params.id)
+  const { id } = await params;  
+
+  const booking = await Booking.findById(id)
     .populate('facilityId venueId userId')
     .lean();
 

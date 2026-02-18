@@ -313,8 +313,6 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
                 payments={plainPayments}
                 isAuthorized={isAuthorized}
               />
-
-
             </div>
 
           )}

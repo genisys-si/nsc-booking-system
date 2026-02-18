@@ -50,10 +50,10 @@ export default function BookingActions({
 
   return (
     <div className="flex flex-col gap-4">
-      <Button onClick={handleMarkPaid} disabled={paymentStatus === "paid"}>
+      {/* <Button onClick={handleMarkPaid} disabled={paymentStatus === "paid"}>
         <CreditCard className="mr-2 h-4 w-4" />
         Mark as Paid
-      </Button>
+      </Button> */}
       <Button onClick={handleSendInvoice} variant="secondary">
         <FileIcon className="mr-2 h-4 w-4" />
         Send Invoice

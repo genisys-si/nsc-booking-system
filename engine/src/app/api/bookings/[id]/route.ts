@@ -73,6 +73,37 @@ export async function PATCH(
       message = "Booking cancelled";
       break;
 
+    case "mark-paid": {
+      const paidAmount = body.paidAmount || 0;
+      const paymentMethod = body.paymentMethod || "cash";
+
+      if (paidAmount <= 0) {
+        return NextResponse.json({ error: "Invalid payment amount" }, { status: 400 });
+      }
+
+      booking.payments = booking.payments || [];
+      booking.payments.push({
+        amount: paidAmount,
+        method: paymentMethod,
+        date: new Date(),
+        recordedBy: session.user.id,
+      });
+
+      booking.totalPaid = (booking.totalPaid || 0) + paidAmount;
+      booking.remainingBalance = (booking.totalPrice || 0) - booking.totalPaid;
+
+      if (booking.remainingBalance <= 0) {
+        booking.paymentStatus = "paid";
+      }
+
+      booking.paymentMethod = paymentMethod;
+      booking.paidAmount = paidAmount;
+      booking.paymentDate = new Date();
+
+      message = "Payment marked as paid";
+      break;
+    }
+
     case "record-payment":
       if (!amount || Number(amount) <= 0) {
         return NextResponse.json({ error: "Invalid payment amount" }, { status: 400 });

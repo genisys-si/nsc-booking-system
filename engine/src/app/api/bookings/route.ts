@@ -143,5 +143,11 @@ export async function GET(req: NextRequest) {
     .sort({ startTime: -1 })
     .lean();
 
-  return NextResponse.json(bookings);
+    // Map to ensure paymentStatus is always included
+  const mappedBookings = bookings.map((b: any) => ({
+    ...b,
+    paymentStatus: b.paymentStatus || 'pending',
+  }));
+
+  return NextResponse.json(mappedBookings);
 }

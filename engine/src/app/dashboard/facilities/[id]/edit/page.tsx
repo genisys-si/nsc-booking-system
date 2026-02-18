@@ -28,41 +28,56 @@ export default async function EditFacilityPage({
   if (!facilityRaw) notFound();
 
   // Authorization: admin or one of the managers
-  const isAuthorized = session.user.role === "admin" ||
-    facilityRaw.managerIds.some((m: any) => m._id.toString() === session.user.id);
+  const isAuthorized =
+    session.user.role === "admin" ||
+    facilityRaw.managerIds?.some((m: any) => m._id.toString() === session.user.id);
 
   if (!isAuthorized) {
     return <div className="p-8 text-center text-destructive">Access denied</div>;
   }
 
-  // Prepare plain object for client component
+  // Convert facility to plain object (critical for client component)
   const facility = {
     _id: facilityRaw._id.toString(),
-    name: facilityRaw.name,
-    location: facilityRaw.location,
+    name: facilityRaw.name || "",
     description: facilityRaw.description || "",
-    status: facilityRaw.status,
-    coordinates: facilityRaw.coordinates || { lat: "", lng: "" },
-    coverImage: facilityRaw.coverImage || "",
-    galleryImages: facilityRaw.galleryImages || [],
-    managerIds: facilityRaw.managerIds.map((m: any) => ({
-      _id: m._id.toString(),
-      name: m.name,
-      email: m.email,
-    })),
     contactPhone: facilityRaw.contactPhone || "",
     contactEmail: facilityRaw.contactEmail || "",
+    status: facilityRaw.status || "active",
+
+    // Use facility name as location if no address field exists
+    location: facilityRaw.location || "",
+
+    // Coordinates: handle both object format and GeoJSON format
+    coordinates: facilityRaw.coordinates
+      ? {
+        lat: facilityRaw.coordinates.lat,
+        lng: facilityRaw.coordinates.lng,
+      }
+      : undefined,
+
+    coverImage: facilityRaw.coverImage || null,
+    galleryImages: facilityRaw.galleryImages || [],
+
+    // Managers: plain objects
+    managerIds: facilityRaw.managerIds?.map((m: any) => ({
+      _id: m._id.toString(),
+      name: m.name || "",
+      email: m.email || "",
+    })) || [],
   };
 
-  // Fetch all possible managers for selection (exclude current facility managers if needed)
+  console.log("Facility coordinates:", facilityRaw);
+
+  // Fetch possible managers (plain objects)
   const allUsers = await User.find({})
     .select("_id name email")
     .lean();
 
-  const possibleManagers = allUsers.map(u => ({
+  const possibleManagers = allUsers.map((u: any) => ({
     _id: u._id.toString(),
-    name: u.name,
-    email: u.email,
+    name: u.name || "",
+    email: u.email || "",
   }));
 
   return (
@@ -77,10 +92,10 @@ export default async function EditFacilityPage({
         </Button>
       </div>
 
+      {/* Pass only plain objects */}
       <FacilityEditForm
         facility={facility}
         possibleManagers={possibleManagers}
-        
       />
     </div>
   );

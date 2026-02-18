@@ -81,18 +81,18 @@ export function FacilityEditForm({
   const [uploading, setUploading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as any, // required for shadcn + complex schema inference
+    const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
-      name: facility.name,
-      location: facility.location,
+      name: facility.name || "",
+      location: facility.location || "",
       description: facility.description || "",
-      status: facility.status as "active" | "inactive" | "maintenance" | "closed",
-      lat: facility.coordinates?.lat,
-      lng: facility.coordinates?.lng,
-      coverImage: undefined, // only new file
-      galleryImages: [], // only new files
-      managerIds: facility.managerIds.map(m => m._id),
+      status: (facility.status as "active" | "inactive" | "maintenance" | "closed") || "active",
+      lat: facility.coordinates?.lat ?? undefined,
+      lng: facility.coordinates?.lng ?? undefined,
+      coverImage: undefined,
+      galleryImages: [],
+      managerIds: facility.managerIds?.map(m => m._id) || [],
       contactPhone: facility.contactPhone || "",
       contactEmail: facility.contactEmail || "",
     },

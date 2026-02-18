@@ -7,11 +7,12 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, DollarSign, User, Phone, Mail, FileText, History, CheckCircle2, XCircle, Ban } from "lucide-react";
+import { ArrowLeft, Calendar, DollarSign, User, Phone, Mail, FileText, History } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { toast } from "sonner";
 import BookingActions from "@/components/booking/BookingActions";
+
+
 
 export default async function BookingDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -22,12 +23,15 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
   await dbConnect();
 
   const params = await paramsPromise;
-  const bookingRaw = await Booking.findById((await params).id)
+
+  const bookingRaw = await Booking.findById(params.id)
     .populate("userId", "name email")
-    .populate("facilityId", "name venues amenities") // Include venues + amenities for lookup
+    .populate("facilityId", "name venues amenities") 
     .lean();
 
   if (!bookingRaw) notFound();
+
+
 
   const booking = {
     ...bookingRaw,
@@ -45,19 +49,21 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
     })) || [],
   };
 
-  // Fetch venue name + selected amenities
+
+
+  // Extract venue name + selected amenities with prices
   let venueName = "—";
   let selectedAmenities: { name: string; surcharge: number }[] = [];
   let amenityTotal = booking.amenitySurcharge || 0;
 
-  console.log(booking);
-
   if (booking.facilityId) {
-    const facility = booking.facilityId; // already populated
+    const facility = booking.facilityId; 
     const venue = facility.venues?.find((v: any) => v._id.toString() === booking.venueId);
     venueName = venue?.name || "—";
 
-    // Match selected amenities from booking to venue's amenities
+  console.log(venue)
+
+    // Match only the amenities actually selected for this booking
     if (booking.selectedAmenities?.length > 0 && venue?.amenities?.length > 0) {
       selectedAmenities = booking.selectedAmenities
         .map((amenId: string) => {
@@ -69,7 +75,6 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
   }
 
   const isAuthorized = session.user.role === "admin" || session.user.role === "manager";
-
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -103,15 +108,16 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
         </div>
       </div>
 
-      {/* Main Info Grid */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left - Core Details */}
+        {/* Left Column - Details */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Booking Information</CardTitle>
             <CardDescription>Invoice #{booking.invoiceId || "—"}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-8">
+            {/* Basic Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Facility</p>
@@ -139,6 +145,7 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
               </div>
             </div>
 
+            {/* Customer Info */}
             <div className="space-y-4">
               <h3 className="font-semibold">Customer Details</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -157,13 +164,56 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
               </div>
             </div>
 
+            {/* Selected Amenities & Charges Breakdown */}
+            <div className="space-y-6">
+              <h3 className="font-semibold">Selected Amenities & Charges</h3>
+
+              {selectedAmenities.length > 0 ? (
+                <div className="space-y-6">
+                  {/* Amenities List */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedAmenities.map((am, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded-md bg-muted/50">
+                        <span className="font-medium">{am.name}</span>
+                        <span className="text-green-600 font-medium">+${am.surcharge.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Charges Breakdown */}
+                  <div className="pt-4 border-t space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Base Price (Venue Rate × Hours):</span>
+                      <span>${booking.basePrice?.toFixed(2) || "0.00"} SBD</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Amenities Surcharge:</span>
+                      <span>${amenityTotal.toFixed(2)} SBD</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                      <span>Grand Total:</span>
+                      <span>${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
+                  <p className="font-medium">No amenities selected for this booking</p>
+                  <p className="text-sm mt-2">
+                    Base: ${booking.basePrice?.toFixed(2) || "0.00"} → Total: ${booking.totalPrice?.toFixed(2) || "0.00"} SBD
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Purpose & Notes */}
             {(booking.purpose || booking.notes) && (
-              <div className="space-y-4">
+              <div className="space-y-4 pt-6 border-t">
                 <h3 className="font-semibold">Additional Info</h3>
                 {booking.purpose && (
                   <div>
                     <p className="text-sm text-muted-foreground">Purpose</p>
-                    <p>{booking.purpose}</p>
+                    <p className="font-medium">{booking.purpose}</p>
                   </div>
                 )}
                 {booking.notes && (
@@ -174,60 +224,19 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
                 )}
               </div>
             )}
-
-            {/* Selected Amenities + Charges Breakdown */}
-            <div className="space-y-6">
-              <h3 className="font-semibold">Selected Amenities & Charges</h3>
-
-              {selectedAmenities.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedAmenities.map((am, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 border rounded-md bg-muted/50">
-                        <span className="font-medium">{am.name}</span>
-                        <span className="text-green-600">+${am.surcharge.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-4 border-t">
-                    <div className="flex justify-between text-sm">
-                      <span>Base Price (Venue Rate × Hours):</span>
-                      <span>${booking.basePrice?.toFixed(2) || "0.00"} SBD</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span>Amenities Surcharge:</span>
-                      <span>${amenityTotal.toFixed(2)} SBD</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-lg mt-4 pt-2 border-t">
-                      <span>Grand Total:</span>
-                      <span>${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-6 text-muted-foreground">
-                  <p>No amenities selected for this booking</p>
-                  <p className="text-sm mt-1">
-                    Base Price: ${booking.basePrice?.toFixed(2) || "0.00"} SBD  
-                    → Total: ${booking.totalPrice?.toFixed(2) || "0.00"} SBD
-                  </p>
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
 
-        {/* Right - Payment & Status Summary */}
+        {/* Right Column - Payment & Actions */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Payment</CardTitle>
+              <CardTitle>Payment Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center font-medium">
                 <span>Total Amount:</span>
-                <span className="font-bold">${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
+                <span>${booking.totalPrice?.toFixed(2) || "0.00"} SBD</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Status:</span>
@@ -239,21 +248,22 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
                   {booking.paymentStatus?.toUpperCase() || "PENDING"}
                 </Badge>
               </div>
+
               {booking.paymentStatus === "paid" && (
-                <>
-                  <div className="flex justify-between items-center">
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="flex justify-between text-sm">
                     <span>Paid Amount:</span>
                     <span>${booking.paidAmount?.toFixed(2) || "0.00"} SBD</span>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between text-sm">
                     <span>Method:</span>
                     <span className="capitalize">{booking.paymentMethod || "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between text-sm">
                     <span>Paid On:</span>
                     <span>{booking.paymentDate ? format(new Date(booking.paymentDate), "PPP p") : "—"}</span>
                   </div>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -277,12 +287,12 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
 
           {/* Action Buttons */}
           {isAuthorized && (
-                        <BookingActions
-                            bookingId={booking._id}
-                            paymentStatus={booking.paymentStatus}
-                            isAuthorized={isAuthorized}
-                        />
-                    )}
+            <BookingActions
+              bookingId={booking._id}
+              paymentStatus={booking.paymentStatus}
+              isAuthorized={isAuthorized}
+            />
+          )}
         </div>
       </div>
 

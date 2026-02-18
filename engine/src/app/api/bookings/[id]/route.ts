@@ -18,13 +18,12 @@ export async function PATCH(
   const body = await req.json();
   const { action, reason, paymentMethod, paidAmount } = body;
 
-  const booking = await Booking.findById(params.id);
+  const booking = await Booking.findById((await params).id);
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  // Optional: Check authorization (admin or manager of this facility)
-  // ...
+  // todo: Check authorization (admin or manager of this facility)
 
   if (action === "mark-paid") {
     if (booking.paymentStatus === "paid") {

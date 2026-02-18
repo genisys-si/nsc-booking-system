@@ -9,8 +9,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   // Allow public/unauthenticated requests → pending status
-  // Uncomment next line if you want to force login
-  // if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
   const body = await req.json();
@@ -25,10 +24,10 @@ export async function POST(req: NextRequest) {
     contactName,
     contactEmail,
     notes,
-    selectedAmenities = [], // array of amenity _ids chosen by user
+    amenities = [], // array of amenity _ids
   } = body;
 
-  if (!facilityId || !venueId || !startTime || !endTime) {
+  if (!facilityId || !venueId || !startTime || !endTime || !contactName || !contactEmail) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
@@ -39,7 +38,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
   }
 
-  // Validate facility & venue exists and is bookable
   const facility = await Facility.findById(facilityId);
   if (!facility) return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
 
@@ -48,28 +46,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Venue not found or not bookable' }, { status: 400 });
   }
 
-  // Availability check
   const available = await isVenueAvailable(venueId.toString(), start, end);
   if (!available) {
     return NextResponse.json({ error: 'Time slot overlaps with existing booking' }, { status: 409 });
   }
 
-  // ───────────────────────────────────────────────
-  // Pricing calculation
-  // ───────────────────────────────────────────────
   const durationMs = end.getTime() - start.getTime();
-  const hours = durationMs / (1000 * 60 * 60); // duration in hours
+  const hours = durationMs / (1000 * 60 * 60);
 
   const basePrice = hours * (venue.pricePerHour || 0);
 
-  // Calculate surcharge for selected amenities
+  
   let amenitySurcharge = 0;
   const validSelectedAmenities: string[] = [];
 
-  if (selectedAmenities.length > 0 && venue.amenities?.length > 0) {
-    for (const amenityId of selectedAmenities) {
-      const amenity = venue.amenities.id(amenityId);
-      if (amenity && amenity.surcharge) {
+  if (amenities.length > 0 && venue.amenities?.length > 0) {
+    for (const amenityId of amenities) {
+      const amenity = venue.amenities.find((a: any) => a._id.toString() === amenityId.toString()); 
+
+      if (amenity && typeof amenity.surcharge === 'number') {
         amenitySurcharge += amenity.surcharge;
         validSelectedAmenities.push(amenityId);
       }
@@ -78,7 +73,11 @@ export async function POST(req: NextRequest) {
 
   const totalPrice = basePrice + amenitySurcharge;
 
-  // Create pending booking with pricing info
+  // Debug log (remove after testing)
+  console.log('Received selectedAmenities:', amenities);
+  console.log('Validated selectedAmenities:', validSelectedAmenities);
+  console.log('Calculated surcharge:', amenitySurcharge);
+
   const booking = await Booking.create({
     userId: session?.user?.id || null,
     facilityId,
@@ -91,19 +90,18 @@ export async function POST(req: NextRequest) {
     contactEmail,
     notes,
     status: 'pending',
-    //pricing fields
-    selectedAmenities: validSelectedAmenities,
+    amenities: validSelectedAmenities, // now saved correctly
     basePrice,
     amenitySurcharge,
     totalPrice,
-    invoiceId: `INV-${Date.now().toString(36).toUpperCase()}`, // short unique ID
+    invoiceId: `INV-${Date.now().toString(36).toUpperCase()}`,
+    paymentStatus: 'pending',
   });
 
   return NextResponse.json({
     success: true,
     bookingId: booking._id,
     message: 'Booking request submitted (pending approval)',
-    // Useful for frontend preview
     pricing: {
       hours: hours.toFixed(2),
       basePrice: basePrice.toFixed(2),
@@ -113,7 +111,6 @@ export async function POST(req: NextRequest) {
     },
   }, { status: 201 });
 }
-
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -141,7 +138,7 @@ export async function GET(req: NextRequest) {
     })
     .populate({
       path: 'venueId',
-      select: 'name pricePerHour',
+      select: 'name pricePerHour amenities',
     })
     .sort({ startTime: -1 })
     .lean();

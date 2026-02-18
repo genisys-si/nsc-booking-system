@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import  SessionProviderWrapper  from "@/components/providers/SessionProviderWrapper";
+import SessionProviderWrapper from "@/components/providers/SessionProviderWrapper";
+import { Suspense } from "react";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -15,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "NSC Booking System",
-  description: "National Sports Concil Booking System for venues and facilities across Solomon Islands",
+  description:
+    "National Sports Concil Booking System for venues and facilities across Solomon Islands",
 };
 
 export default function RootLayout({
@@ -25,20 +28,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <SessionProviderWrapper>
-          {children}
-        </SessionProviderWrapper>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <Suspense fallback={<div />}>
+          <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        </Suspense>
+
         <Toaster
-          position="top-right"         // or "top-center", "bottom-right", etc.
-          richColors                   // nicer colors for success/error/info
-          closeButton                  // shows × button
-          duration={4500}              // how long toasts stay visible
-          theme="system"               // auto dark/light mode
+          position="top-right"
+          richColors
+          closeButton
+          duration={4500}
+          theme="system"
           toastOptions={{
-            // Optional global styling overrides
             className: "border border-border rounded-md shadow-lg",
             style: {
               background: "hsl(var(--background))",

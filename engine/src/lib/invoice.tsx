@@ -20,6 +20,7 @@ interface BookingForInvoice {
   basePrice: number;
   amenitySurcharge: number;
   totalPrice: number;
+  pricePerHour?: number;
   selectedAmenities?: Array<{ name: string; surcharge: number }>;
 }
 
@@ -103,7 +104,7 @@ function InvoiceDocument({ booking }: { booking: BookingForInvoice }) {
           <Text style={{ fontSize: 14, marginBottom: 6 }}>Pricing Summary</Text>
           <View style={styles.row}>
             <Text>
-              Base Price ({hours} hours @ SBD {booking.venueId.pricePerHour || '—'}/hr):
+              Base Price ({hours} hours @ SBD {booking.pricePerHour || '—'}/hr):
             </Text>
             <Text>SBD {booking.basePrice.toFixed(2)}</Text>
           </View>
@@ -133,6 +134,23 @@ function InvoiceDocument({ booking }: { booking: BookingForInvoice }) {
 // The export function that generates the PDF buffer
 export async function generateInvoicePDF(booking: BookingForInvoice): Promise<Buffer> {
   const pdfInstance = pdf(<InvoiceDocument booking={booking} />);
-  const buffer = await pdfInstance.toBuffer();
-  return buffer;
+  
+  try {
+    const chunks: Uint8Array[] = [];
+    const stream = await pdfInstance.toBuffer();
+    
+    return new Promise((resolve, reject) => {
+      stream.on('data', (chunk: Uint8Array) => {
+        chunks.push(chunk);
+      });
+      stream.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+      stream.on('error', (error: Error) => {
+        reject(error);
+      });
+    });
+  } catch (error) {
+    throw error;
+  }
 }

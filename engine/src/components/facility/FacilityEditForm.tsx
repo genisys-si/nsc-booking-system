@@ -147,9 +147,9 @@ export function FacilityEditForm({
   const removeImage = (index: number, isCover = false) => {
     if (isCover) {
       setCoverPreview(null);
-      form.setValue("coverImage", undefined);
       if (facility.coverImage) {
-        setDeletedImages(prev => [...prev, facility.coverImage]);
+        form.setValue("coverImage", undefined);
+        setDeletedImages(prev => [...prev, facility.coverImage!]);
       }
     } else {
       const removedSrc = galleryPreviews[index];
@@ -373,11 +373,10 @@ export function FacilityEditForm({
                       {possibleManagers.map(m => (
                         <div
                           key={m._id}
-                          className={`px-3 py-1 rounded-full text-sm border cursor-pointer transition-colors ${
-                            field.value.includes(m._id)
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted hover:bg-muted/80"
-                          }`}
+                          className={`px-3 py-1 rounded-full text-sm border cursor-pointer transition-colors ${field.value.includes(m._id)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted hover:bg-muted/80"
+                            }`}
                           onClick={() => {
                             const current = field.value || [];
                             field.onChange(

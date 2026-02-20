@@ -70,3 +70,14 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export async function GET(req: NextRequest) {
+  await dbConnect();
+  try {
+    const facilities = await Facility.find({}).lean();
+    return NextResponse.json(facilities, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
+  } catch (error: any) {
+    console.error('Facilities GET error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+}

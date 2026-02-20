@@ -157,3 +157,22 @@ export async function PATCH(
     return NextResponse.json({ error: error.message || "Server error" }, { status: 500 });
   }
 }
+
+export async function GET(
+  req: NextRequest,
+  { params: paramsPromise }: { params: Promise<{ venueId: string }> }
+) {
+  const params = await paramsPromise;
+  await dbConnect();
+  try {
+    const facility = await Facility.findOne({ 'venues._id': params.venueId }, { 'venues.$': 1, name: 1 }).lean();
+    if (!facility || !facility.venues || facility.venues.length === 0) {
+      return NextResponse.json({ error: 'Venue not found' }, { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
+    }
+    const venue = facility.venues[0];
+    return NextResponse.json({ facilityName: facility.name, venue }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
+  } catch (error: any) {
+    console.error('Venue GET error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+}

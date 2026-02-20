@@ -8,8 +8,16 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  // Allow public/unauthenticated requests → pending status
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Allow public/unauthenticated requests → treat as guest (pending)
+  // proceed even if no session; `userId` will be saved as `null`
+  // middleware may attach `x-user` header when a valid JWT is provided
+  let xUser: any = null;
+  try {
+    const xu = req.headers.get('x-user');
+    if (xu) xUser = JSON.parse(xu);
+  } catch (e) {
+    // ignore parse errors
+  }
 
   await dbConnect();
   const body = await req.json();
@@ -79,7 +87,7 @@ export async function POST(req: NextRequest) {
   console.log('Calculated surcharge:', amenitySurcharge);
 
   const booking = await Booking.create({
-    userId: session?.user?.id || null,
+    userId: session?.user?.id || xUser?.id || null,
     facilityId,
     venueId,
     startTime: start,
@@ -109,25 +117,33 @@ export async function POST(req: NextRequest) {
       totalPrice: totalPrice.toFixed(2),
       currency: 'SBD',
     },
-  }, { status: 201 });
+  }, { status: 201, headers: { 'Access-Control-Allow-Origin': '*' } });
 }
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Allow session or JWT-provided user via middleware `x-user`
+  let xUser: any = null;
+  try {
+    const xu = req.headers.get('x-user');
+    if (xu) xUser = JSON.parse(xu);
+  } catch (e) {}
+
+  if (!session?.user && !xUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
 
   let filter: any = {};
 
-  if (session.user.role === 'manager') {
-    const managedFacility = await Facility.findOne({ managerIds: session.user.id });
+  const authUser = session?.user || xUser;
+  if (authUser.role === 'manager') {
+    const managedFacility = await Facility.findOne({ managerIds: authUser.id });
     if (managedFacility) {
       filter.facilityId = managedFacility._id;
     } else {
       return NextResponse.json([]);
     }
-  } else if (session.user.role === 'user') {
-    filter.userId = session.user.id;
+  } else if (authUser.role === 'user') {
+    filter.userId = authUser.id;
   }
   // admin → no filter
   const bookings = await Booking.find(filter)

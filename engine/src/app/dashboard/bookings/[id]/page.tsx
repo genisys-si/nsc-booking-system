@@ -27,16 +27,30 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
 
   const bookingRaw = await Booking.findById(params.id)
     .populate("userId", "name email")
-    .populate("facilityId", "name venues amenities")
     .lean();
 
   if (!bookingRaw) notFound();
+
+  // Explicitly load the facility so we always have access to nested
+  // `venues` and their `amenities` (populate on nested subdocs can be
+  // unreliable). This guarantees venue name & amenities are available
+  // for the booking details view.
+  const facilityRaw = bookingRaw.facilityId
+    ? await Facility.findById(bookingRaw.facilityId).lean()
+    : null;
+  if (!facilityRaw) {
+    // If facility referenced by booking isn't found, treat as not found
+    return notFound();
+  }
 
 
 
   const booking = {
     ...bookingRaw,
     _id: bookingRaw._id.toString(),
+    venueId: bookingRaw.venueId?.toString(),
+    facilityId: facilityRaw,
+    selectedAmenities: (bookingRaw.amenities || []).map((a: any) => a?.toString ? a.toString() : String(a)),
     startTime: bookingRaw.startTime.toISOString(),
     endTime: bookingRaw.endTime.toISOString(),
     createdAt: bookingRaw.createdAt.toISOString(),

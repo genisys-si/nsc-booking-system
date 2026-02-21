@@ -33,7 +33,7 @@ export type BookingRow = {
   basePrice?: number;
   amenitySurcharge?: number;
   totalPrice?: number;
-  invoiceId?: string;
+  bookingRef?: string;
   createdAt: string;
   statusHistory?: {
     status: string;
@@ -49,16 +49,16 @@ export type BookingRow = {
 
 export const columns: ColumnDef<BookingRow>[] = [
   {
-    accessorKey: "invoiceId",
-    header: "Invoice ID",
+    accessorKey: "bookingRef",
+    header: "Booking Ref",
     cell: ({ row }) => (
-    <Link
-      href={`/dashboard/bookings/${row.original._id}`}
-      className="text-primary hover:underline"
-    >
-      {row.original.invoiceId || "—"}
-    </Link>
-  ),
+      <Link
+        href={`/dashboard/bookings/${row.original._id}`}
+        className="text-primary hover:underline"
+      >
+        {row.original.bookingRef || "—"}
+      </Link>
+    ),
   },
   {
     accessorKey: "facilityId.name",

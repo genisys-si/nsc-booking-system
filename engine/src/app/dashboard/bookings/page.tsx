@@ -72,6 +72,7 @@ export default async function BookingsPage({
     amenitySurcharge: b.amenitySurcharge,
     totalPrice: b.totalPrice,
     invoiceId: b.invoiceId,
+    bookingRef: b.bookingRef || null,
     paymentStatus: b.paymentStatus || 'pending',
     createdAt: b.createdAt.toISOString(),
   }));

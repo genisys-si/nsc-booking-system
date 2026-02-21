@@ -29,6 +29,7 @@ export interface IBooking extends Document {
   amenitySurcharge?: number;  //sum of amenity surcharges
   totalPrice?: number;  // base + surcharge
   invoiceId?: string;  //unique ID for receipt
+  bookingRef?: string; // human-friendly booking reference
   purpose?: string;
   attendees?: number;
   contactName?: string;
@@ -65,6 +66,7 @@ const bookingSchema = new Schema<IBooking>({
   amenitySurcharge: { type: Number, default: 0 },  //sum of amenity surcharges
   totalPrice: { type: Number, default: 0 },  // base + surcharge
   invoiceId: String,  //unique ID for receipt
+  bookingRef: { type: String, index: true, unique: true, sparse: true },
   statusHistory: [{
     status: {
       type: String,

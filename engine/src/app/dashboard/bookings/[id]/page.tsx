@@ -136,7 +136,9 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Booking Information</CardTitle>
-            <CardDescription>Invoice #{booking.invoiceId || "—"}</CardDescription>
+            <CardDescription>
+              Invoice #{booking.invoiceId || "—"} · Ref: {booking.bookingRef || "—"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
             {/* Basic Info */}

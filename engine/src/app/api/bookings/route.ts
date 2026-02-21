@@ -32,8 +32,14 @@ export async function POST(req: NextRequest) {
     contactName,
     contactEmail,
     notes,
-    amenities = [], // array of amenity _ids
   } = body;
+
+  // Support both `amenities` and `selectedAmenities` from clients
+  const amenities = Array.isArray(body.amenities)
+    ? body.amenities
+    : Array.isArray(body.selectedAmenities)
+    ? body.selectedAmenities
+    : [];
 
   if (!facilityId || !venueId || !startTime || !endTime || !contactName || !contactEmail) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -81,10 +87,10 @@ export async function POST(req: NextRequest) {
 
   const totalPrice = basePrice + amenitySurcharge;
 
-  // Debug log (remove after testing)
-  console.log('Received selectedAmenities:', amenities);
-  console.log('Validated selectedAmenities:', validSelectedAmenities);
-  console.log('Calculated surcharge:', amenitySurcharge);
+
+
+  // Generate a short human-friendly booking reference
+  const bookingRef = `BK-${Date.now().toString(36).toUpperCase()}`;
 
   const booking = await Booking.create({
     userId: session?.user?.id || xUser?.id || null,
@@ -103,12 +109,14 @@ export async function POST(req: NextRequest) {
     amenitySurcharge,
     totalPrice,
     invoiceId: `INV-${Date.now().toString(36).toUpperCase()}`,
+    bookingRef,
     paymentStatus: 'pending',
   });
 
   return NextResponse.json({
     success: true,
     bookingId: booking._id,
+    bookingRef: bookingRef,
     message: 'Booking request submitted (pending approval)',
     pricing: {
       hours: hours.toFixed(2),
@@ -165,5 +173,12 @@ export async function GET(req: NextRequest) {
     paymentStatus: b.paymentStatus || 'pending',
   }));
 
-  return NextResponse.json(mappedBookings);
+  // Ensure bookingRef is present on each returned booking for UI tables
+  const withRefs = mappedBookings.map((b: any) => ({
+    ...b,
+    bookingRef: b.bookingRef || null,
+  }));
+
+  return NextResponse.json(withRefs);
+
 }

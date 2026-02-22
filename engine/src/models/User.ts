@@ -8,6 +8,8 @@ const userSchema = new Schema({
   role: { type: String, enum: ['admin', 'manager', 'user'], default: 'user' },
   lastLogin: Date,
   isActive: { type: Boolean, default: true },
+  passwordResetToken: String,
+  passwordResetExpires: Date,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   // managedFacilityId: { type: Schema.Types.ObjectId, ref: 'Facility' } // optional

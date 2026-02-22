@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Building2, Calendar, LogOut, Users } from "lucide-react";
+import { Building2, Calendar, LogOut, Users, Settings, User as UserIcon } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard/facilities", label: "My Facilities", icon: Building2 },
   { href: "/dashboard/bookings", label: "Bookings", icon: Calendar },
   { href: "/dashboard/users", label: "Users", icon: Users, adminOnly: true },
+  { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
 export default function Sidebar({ user }: { user: any }) {
@@ -38,9 +40,12 @@ export default function Sidebar({ user }: { user: any }) {
         })}
       </nav>
 
-      <div className="p-4 border-t mt-auto">
+      <div className="p-4 border-t mt-auto space-y-2">
         <Button variant="outline" className="w-full" asChild>
-          <a href="/api/auth/signout">Sign Out</a>
+          <a href="/api/auth/signout" className="flex items-center justify-center gap-2">
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </a>
         </Button>
       </div>
     </div>

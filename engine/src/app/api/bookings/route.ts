@@ -3,8 +3,10 @@ import { getServerSession } from 'next-auth';
 import dbConnect from '@/lib/db';
 import Booking from '@/models/Booking';
 import Facility from '@/models/Facility';
+import Settings from '@/models/Settings';
 import { isVenueAvailable } from '@/lib/availability';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import nodemailer from 'nodemailer';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -52,6 +54,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
   }
 
+  // Load settings once for booking policy validation and email sending
+  const settings = await Settings.findOne().lean();
+
+  // Check minimum lead time policy
+  if (settings?.bookingPolicies?.minLeadTimeHours) {
+    const minLeadTime = new Date(Date.now() + settings.bookingPolicies.minLeadTimeHours * 60 * 60 * 1000);
+    if (start < minLeadTime) {
+      return NextResponse.json({ 
+        error: `Booking must be made at least ${settings.bookingPolicies.minLeadTimeHours} hours in advance` 
+      }, { status: 400 });
+    }
+  }
+
   const facility = await Facility.findById(facilityId);
   if (!facility) return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
 
@@ -60,13 +75,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Venue not found or not bookable' }, { status: 400 });
   }
 
-  const available = await isVenueAvailable(venueId.toString(), start, end);
+  // Check maximum duration policy
+  const durationMs = end.getTime() - start.getTime();
+  const hours = durationMs / (1000 * 60 * 60);
+  if (settings?.bookingPolicies?.maxDurationHours && hours > settings.bookingPolicies.maxDurationHours) {
+    return NextResponse.json({ 
+      error: `Booking duration cannot exceed ${settings.bookingPolicies.maxDurationHours} hours` 
+    }, { status: 400 });
+  }
+
+  // Check availability with optional buffer time
+  const bufferMs = (settings?.bookingPolicies?.bufferMinutes || 0) * 60 * 1000;
+  const bufferedStart = new Date(start.getTime() - bufferMs);
+  const bufferedEnd = new Date(end.getTime() + bufferMs);
+  const available = await isVenueAvailable(venueId.toString(), bufferedStart, bufferedEnd);
   if (!available) {
     return NextResponse.json({ error: 'Time slot overlaps with existing booking' }, { status: 409 });
   }
-
-  const durationMs = end.getTime() - start.getTime();
-  const hours = durationMs / (1000 * 60 * 60);
 
   const basePrice = hours * (venue.pricePerHour || 0);
 
@@ -112,6 +137,52 @@ export async function POST(req: NextRequest) {
     bookingRef,
     paymentStatus: 'pending',
   });
+
+  // Send booking confirmation email if enabled in Settings
+  if (settings?.notifications?.emailEnabled && settings?.smtp?.host) {
+    try {
+      const renderTemplate = (tpl: string, vars: Record<string, string>) => {
+        if (!tpl) return '';
+        return tpl.replace(/{{\s*([a-zA-Z0-9_\.]+)\s*}}/g, (_, key) => {
+          return (vars[key] ?? '') as string;
+        });
+      };
+
+      const dashboardUrl = `${settings?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard/bookings/${booking._id}`;
+
+      const subject = renderTemplate(settings?.templates?.bookingConfirmationSubject || 'Booking confirmation', {
+        bookingRef,
+        venueName: venue.name || '',
+        userName: contactName,
+      });
+
+      const html = renderTemplate(settings?.templates?.bookingConfirmationHtml || '<p>Your booking is confirmed</p>', {
+        bookingRef,
+        venueName: venue.name || '',
+        userName: contactName,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        dashboardUrl,
+        totalPrice: totalPrice.toFixed(2),
+      });
+
+      const transporter = nodemailer.createTransport({
+        host: settings.smtp.host,
+        port: settings.smtp.port,
+        secure: !!settings.smtp.secure,
+        auth: settings.smtp.user ? { user: settings.smtp.user, pass: settings.smtp.pass } : undefined,
+      });
+
+      await transporter.sendMail({
+        from: settings.smtp.from || settings.smtp.user,
+        to: contactEmail,
+        subject,
+        html,
+      });
+    } catch (err) {
+      console.error('Failed to send booking confirmation email:', err);
+    }
+  }
 
   return NextResponse.json({
     success: true,

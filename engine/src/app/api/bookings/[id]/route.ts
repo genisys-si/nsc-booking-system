@@ -4,7 +4,9 @@ import { getServerSession } from "next-auth";
 import dbConnect from "@/lib/db";
 import Booking from "@/models/Booking";
 import Facility from "@/models/Facility";
+import Settings from "@/models/Settings";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import nodemailer from "nodemailer";
 
 export async function PATCH(
   req: NextRequest,
@@ -148,6 +150,58 @@ export async function PATCH(
   });
 
   await booking.save();
+
+  // Send notification email if status changed to "confirmed"
+  if (action === "confirm") {
+    const settings = await Settings.findOne().lean();
+    if (settings?.notifications?.emailEnabled && settings?.smtp?.host) {
+      try {
+        const renderTemplate = (tpl: string, vars: Record<string, string>) => {
+          if (!tpl) return '';
+          return tpl.replace(/{{\s*([a-zA-Z0-9_\.]+)\s*}}/g, (_, key) => {
+            return (vars[key] ?? '') as string;
+          });
+        };
+
+        const facility = await Facility.findById(booking.facilityId).lean();
+        const venue = facility?.venues?.id(booking.venueId);
+
+        const dashboardUrl = `${settings?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard/bookings/${booking._id}`;
+
+        const subject = renderTemplate(settings?.templates?.bookingConfirmationSubject || 'Booking confirmed', {
+          bookingRef: booking.bookingRef || '',
+          venueName: venue?.name || '',
+          userName: booking.contactName || '',
+        });
+
+        const html = renderTemplate(settings?.templates?.bookingConfirmationHtml || '<p>Your booking is confirmed</p>', {
+          bookingRef: booking.bookingRef || '',
+          venueName: venue?.name || '',
+          userName: booking.contactName || '',
+          startTime: booking.startTime.toISOString(),
+          endTime: booking.endTime.toISOString(),
+          dashboardUrl,
+          totalPrice: (booking.totalPrice || 0).toFixed(2),
+        });
+
+        const transporter = nodemailer.createTransport({
+          host: settings.smtp.host,
+          port: settings.smtp.port,
+          secure: !!settings.smtp.secure,
+          auth: settings.smtp.user ? { user: settings.smtp.user, pass: settings.smtp.pass } : undefined,
+        });
+
+        await transporter.sendMail({
+          from: settings.smtp.from || settings.smtp.user,
+          to: booking.contactEmail,
+          subject,
+          html,
+        });
+      } catch (err) {
+        console.error('Failed to send booking confirmation email:', err);
+      }
+    }
+  }
 
   return NextResponse.json({
     success: true,

@@ -8,7 +8,8 @@ export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'admin') return <div>Unauthorized</div>;
   await dbConnect();
-  const s = await Settings.findOne().lean();
+  const settingsData = await Settings.findOne().lean();
+  const s = settingsData ? JSON.parse(JSON.stringify(settingsData)) : null;
 
   return (
     <div className="w-full min-h-screen py-8 px-6">

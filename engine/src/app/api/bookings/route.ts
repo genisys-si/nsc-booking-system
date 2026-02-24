@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   const bookingRef = `BK-${Date.now().toString(36).toUpperCase()}`;
 
   const booking = await Booking.create({
-    userId: session?.user?.id || xUser?.id || null,
+    userId: session?.user?.id || xUser?.id || undefined,
     facilityId,
     venueId,
     startTime: start,

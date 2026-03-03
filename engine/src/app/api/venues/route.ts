@@ -4,6 +4,23 @@ import Facility from "@/models/Facility";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { saveVenueImage } from "@/lib/upload";
+import { put } from "@vercel/blob"; // Import Blob function
+
+/**
+ * Helper to upload venue images to Vercel Blob
+ */
+async function uploadVenueToBlob(file: File): Promise<string> {
+  const timestamp = Date.now();
+  // Clean filename to prevent encoding issues
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+  const fileName = `venues/${timestamp}-${cleanName}`;
+
+  const blob = await put(fileName, file, {
+    access: "public",
+  });
+
+  return blob.url;
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -48,15 +65,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
-    // Handle image uploads
+    // --- HANDLE IMAGE UPLOADS VIA VERCEL BLOB ---
     const images: string[] = [];
     const imageFiles = formData.getAll("images") as File[];
 
     for (const file of imageFiles) {
-      if (file.size > 0) {
-        const savedPath = await saveVenueImage(file);
-        console.log(savedPath);
-        images.push(savedPath);
+      if (file instanceof File && file.size > 0) {
+        // Upload to cloud instead of local disk
+        const blobUrl = await uploadVenueToBlob(file);
+        console.log("Uploaded to Blob:", blobUrl);
+        images.push(blobUrl);
       }
     }
 

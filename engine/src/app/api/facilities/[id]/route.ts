@@ -6,35 +6,36 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import fs from "fs/promises";
 import path from "path";
 import { uuidv4 } from "zod";
+import { put, del } from "@vercel/blob"; // Import Blob functions
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "facilities");
 
-async function deleteImageFromDisk(imagePath: string) {
-  if (!imagePath.startsWith("/uploads/facilities/")) return;
 
-  const filename = imagePath.split("/").pop();
-  if (!filename) return;
-
-  const fullPath = path.join(UPLOAD_DIR, filename);
+async function deleteImageFromBlob(url: string) {
+  if (!url || !url.includes("public.blob.vercel-storage.com")) return;
 
   try {
-    await fs.unlink(fullPath);
-    console.log(`Deleted facility image: ${fullPath}`);
+    await del(url);
+    console.log(`Deleted blob image: ${url}`);
   } catch (err) {
-    console.warn(`Failed to delete image ${fullPath}:`, err);
+    console.warn(`Failed to delete blob image ${url}:`, err);
   }
 }
 
-async function saveFacilityImage(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = path.extname(file.name).toLowerCase() || ".jpg";
-  const filename = `${uuidv4()}${ext}`;
-  const filepath = path.join(UPLOAD_DIR, filename);
+/**
+ * Uploads an image to Vercel Blob
+ */
+async function saveFacilityImageToBlob(file: File): Promise<string> {
+  // Generate a clean filename
+  const timestamp = Date.now();
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+  const fileName = `facilities/${timestamp}-${cleanName}`;
 
-  await fs.mkdir(path.dirname(filepath), { recursive: true });
-  await fs.writeFile(filepath, buffer);
+  // put() handles the buffer conversion and storage automatically
+  const blob = await put(fileName, file, {
+    access: "public",
+  });
 
-  return `/uploads/facilities/${filename}`;
+  return blob.url; // Returns the full https:// URL
 }
 
 export async function PATCH(
@@ -53,6 +54,7 @@ export async function PATCH(
   try {
     const formData = await req.formData();
 
+    // Basic fields
     const name = formData.get("name") as string;
     const location = formData.get("location") as string;
     const description = formData.get("description") as string || undefined;
@@ -108,29 +110,29 @@ export async function PATCH(
       facility.galleryImages = facility.galleryImages.filter(
         (img: string) => !deletedImages.includes(img)
       );
-      facility.coverImage = deletedImages.includes(facility.coverImage)
-        ? undefined
-        : facility.coverImage;
+      
+      if (deletedImages.includes(facility.coverImage)) {
+        facility.coverImage = undefined;
+      }
 
-      // Delete from disk
-      for (const imgPath of deletedImages) {
-        await deleteImageFromDisk(imgPath);
+      for (const imgUrl of deletedImages) {
+        await deleteImageFromBlob(imgUrl);
       }
     }
 
     // New cover image
     const newCover = formData.get("coverImage") as File;
     if (newCover instanceof File && newCover.size > 0) {
-      const savedCover = await saveFacilityImage(newCover);
-      facility.coverImage = savedCover;
+      const savedCoverUrl = await saveFacilityImageToBlob(newCover);
+      facility.coverImage = savedCoverUrl;
     }
 
     // New gallery images
     const newGalleryFiles = formData.getAll("galleryImages") as File[];
     for (const file of newGalleryFiles) {
       if (file instanceof File && file.size > 0) {
-        const savedPath = await saveFacilityImage(file);
-        facility.galleryImages.push(savedPath);
+        const savedPathUrl = await saveFacilityImageToBlob(file);
+        facility.galleryImages.push(savedPathUrl);
       }
     }
 

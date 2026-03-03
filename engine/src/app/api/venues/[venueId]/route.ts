@@ -3,52 +3,47 @@ import dbConnect from "@/lib/db";
 import Facility from "@/models/Facility";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import fs from "fs/promises";
-import path from "path";
-import { v4 as uuidv4 } from "uuid";
+import {put, del} from "@vercel/blob"; // Import Blob functions
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "venues");
 
-async function ensureUploadDir() {
-  await fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(() => {});
-}
 
-async function saveVenueImage(file: any): Promise<string | null> {
-  // Safety: skip invalid files
+/**
+ * Uploads a venue image to Vercel Blob
+ */
+async function saveVenueImageToBlob(file: File): Promise<string | null> {
   if (!(file instanceof File) || file.size <= 0 || !file.name) {
-    console.warn("Invalid file skipped in saveVenueImage:", file);
+    console.warn("Invalid file skipped in saveVenueImageToBlob:", file);
     return null;
   }
 
-  await ensureUploadDir();
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = path.extname(file.name).toLowerCase() || ".jpg";
-  const filename = `${uuidv4()}${ext}`;
-  const filepath = path.join(UPLOAD_DIR, filename);
-
   try {
-    await fs.writeFile(filepath, buffer);
-    return `/uploads/venues/${filename}`;
+    const timestamp = Date.now();
+    const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const fileName = `venues/${timestamp}-${cleanName}`;
+
+    const blob = await put(fileName, file, {
+      access: "public",
+    });
+
+    return blob.url;
   } catch (err) {
-    console.error("File write error:", err);
+    console.error("Vercel Blob upload error:", err);
     return null;
   }
 }
 
-async function deleteImageFromDisk(imagePath: string) {
-  if (!imagePath || !imagePath.startsWith("/uploads/venues/")) return;
-
-  const filename = imagePath.split("/").pop();
-  if (!filename) return;
-
-  const fullPath = path.join(UPLOAD_DIR, filename);
+/**
+ * Deletes an image from Vercel Blob
+ */
+async function deleteImageFromBlob(url: string) {
+  // Only attempt deletion if it's a Vercel Blob URL
+  if (!url || !url.includes("public.blob.vercel-storage.com")) return;
 
   try {
-    await fs.unlink(fullPath);
-    console.log(`Deleted: ${fullPath}`);
+    await del(url);
+    console.log(`Deleted blob image: ${url}`);
   } catch (err) {
-    console.warn(`Delete failed: ${fullPath}`, err);
+    console.warn(`Blob delete failed: ${url}`, err);
   }
 }
 
@@ -112,29 +107,27 @@ export async function PATCH(
     venue.isBookable = isBookable;
     venue.amenities = amenities;
 
-    // Handle deleted images
+    // 1. Handle deleted images (Vercel Blob del)
     if (deletedImages.length > 0) {
       venue.images = venue.images.filter((img: string) => !deletedImages.includes(img));
 
-      for (const imgPath of deletedImages) {
-        await deleteImageFromDisk(imgPath);
+      for (const imgUrl of deletedImages) {
+        await deleteImageFromBlob(imgUrl);
       }
     }
 
-    // Handle new images – very defensive
+    // 2. Handle new images (Vercel Blob put)
     const newImageFiles = formData.getAll("images");
     for (const item of newImageFiles) {
       if (item instanceof File && item.size > 0 && item.name) {
         try {
-          const savedPath = await saveVenueImage(item);
-          if (savedPath) {
-            venue.images.push(savedPath);
+          const savedUrl = await saveVenueImageToBlob(item);
+          if (savedUrl) {
+            venue.images.push(savedUrl);
           }
         } catch (err) {
-          console.error("Failed to save image:", err);
+          console.error("Failed to upload image to blob:", err);
         }
-      } else {
-        console.warn("Skipped invalid file item:", item);
       }
     }
 

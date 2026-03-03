@@ -18,7 +18,10 @@ const nextConfig: NextConfig = {
       },
       {
         hostname: 'nsc.gov.sb',
-      }
+      },
+      {
+        hostname: '*public.blob.vercel-storage.com',
+      },
       // Add production domains later, e.g.:
       // {
       //   protocol: 'https',

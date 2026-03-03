@@ -290,10 +290,10 @@ export function BookingWizard() {
   ];
 
   return (
-    <Card className="border-0 shadow-xl">
-      <CardContent className="p-6 md:p-10">
+    <Card className="border-0 min-h-[80vh] w-min-full flex flex-col">
+      <CardContent className="p-6 md:p-12 flex-1 flex flex-col">
         {/* Stepper */}
-        <div className="mb-10">
+        <div className="mb-12">
           <div className="flex justify-between">
             {steps.map((s, i) => (
               <div key={i} className="flex-1 text-center">
@@ -314,24 +314,24 @@ export function BookingWizard() {
         </div>
 
         <FormProvider {...form}>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 flex-1 flex flex-col">
             {step === 1 && <StepFacility form={form} facilities={facilities} loading={loadingFacilities} setStep={setStep} />}
             {step === 2 && <StepVenue form={form} facilities={facilities} setStep={setStep} />}
             {step === 3 && <StepDateTime form={form} bookedDates={bookedDates} availability={availability} />}
             {step === 4 && <StepExtras form={form} facilities={facilities} />}
             {step === 5 && <StepInfo form={form} />}
             {step === 6 && <StepReview form={form} facilities={facilities} pricePreview={pricePreview} />}
-            {step === 7 && <StepSuccess bookingResult={bookingResult} />}
+            {step === 7 && <div className="flex-1 flex items-center justify-center"><StepSuccess bookingResult={bookingResult} /></div>}
 
             {/* Navigation */}
             {step < 6 && (
-              <div className="flex justify-between mt-12">
+              <div className="flex justify-between mt-auto pt-12">
                 {step > 1 && (
-                  <Button type="button" variant="outline" onClick={prevStep}>
+                  <Button type="button" variant="outline" size="lg" onClick={prevStep}>
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back
                   </Button>
                 )}
-                <Button type="button" onClick={nextStep} className="ml-auto">
+                <Button type="button" size="lg" onClick={nextStep} className="ml-auto">
                   Next
                   <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -340,8 +340,8 @@ export function BookingWizard() {
             
             {/* Separate Navigation for Review Step to avoid fake submit */}
             {step === 6 && (
-              <div className="flex justify-between mt-12">
-                <Button type="button" variant="outline" onClick={prevStep}>
+              <div className="flex justify-between mt-auto pt-12">
+                <Button type="button" variant="outline" size="lg" onClick={prevStep}>
                   <ChevronLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
                 {/* Submit is handled by the button inside StepReview, or we can add one here if preferred, 
@@ -372,7 +372,7 @@ function StepFacility({
 }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {[...Array(6)].map((_, i) => (
           <Card key={i} className="overflow-hidden">
             <Skeleton className="h-48 w-full" />
@@ -386,7 +386,7 @@ function StepFacility({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {facilities.map(facility => (
         <Card
           key={facility._id}
@@ -452,7 +452,7 @@ function StepVenue({
       {!selectedFacility || selectedFacility.venues.length === 0 ? (
         <p className="text-center text-muted-foreground py-12">No venues available in this facility.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {selectedFacility.venues.map((venue: Venue) => (
             <Card
               key={venue._id}
@@ -763,7 +763,7 @@ function StepReview({ form, facilities, pricePreview }: { form: any; facilities:
 
 function StepSuccess({ bookingResult }: { bookingResult: BookingResult | null }) {
   return (
-    <div className="text-center space-y-8 py-16">
+    <div className="text-center space-y-8 w-full max-w-2xl">
       <div className="flex justify-center">
         <div className="rounded-full bg-green-100 p-8">
           <Check className="h-16 w-16 text-green-600" />
@@ -783,7 +783,7 @@ function StepSuccess({ bookingResult }: { bookingResult: BookingResult | null })
       </div>
 
       <Button asChild variant="outline" size="lg" className="mt-8">
-        <a href="/">Make Another Booking</a>
+        <a href="/book">Make Another Booking</a>
       </Button>
     </div>
   );

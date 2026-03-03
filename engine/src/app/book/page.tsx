@@ -3,7 +3,7 @@ import { BookingWizard } from "@/components/booking/BookingWizard";
 
 export default function PublicBookingPage() {
   return (
-    <div className="container mx-auto py-12 px-4 max-w-5xl">
+    <div className="container mx-auto py-12 px-4 max-w-7xl">
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-bold mb-4">
           Book a Venue

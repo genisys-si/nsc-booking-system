@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
         port: '3000',
         pathname: '/uploads/**',
       },
+      {
+        hostname: 'nsc.gov.sb',
+      }
       // Add production domains later, e.g.:
       // {
       //   protocol: 'https',

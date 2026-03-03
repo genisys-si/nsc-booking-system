@@ -2,6 +2,26 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+
+@media print {
+  /* Hide everything except the success card content */
+  header, footer, nav, .print-hidden, button, .lucide {
+    display: none !important;
+  }
+  
+  /* Ensure the background of the ID box shows up or has a border */
+  .bg-muted {
+    background-color: #f4f4f5 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body {
+    background: white !important;
+  }
+}
+
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

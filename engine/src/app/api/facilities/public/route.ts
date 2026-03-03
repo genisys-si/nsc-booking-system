@@ -6,7 +6,7 @@ import Facility from "@/models/Facility";
 export async function GET() {
   await dbConnect();
   const facilities = await Facility.find({})
-    .select("name venues")
+    .select("name coverImage venues")
     .lean();
 
   return NextResponse.json(facilities);

@@ -1,20 +1,30 @@
-// src/app/book/page.tsx
+"use client";
+import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingWizard } from "@/components/booking/BookingWizard";
+import { Link } from "lucide-react";
+import Image
+  from "next/image";
 
 export default function PublicBookingPage() {
   return (
-    <div className="container mx-auto py-12 px-4 max-w-7xl">
+    <div>
+      <BookingHeader />
+      <div className="container mx-auto py-12 px-4 max-w-7xl">
+      
+
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-bold mb-4">
           Book a Venue
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Reserve your space at the National Sports Council facilities. 
+          Reserve your space at the National Sports Council facilities.
           Choose a venue, date, and extras — we'll handle the rest.
         </p>
       </div>
 
       <BookingWizard />
     </div>
+    </div>
+    
   );
 }

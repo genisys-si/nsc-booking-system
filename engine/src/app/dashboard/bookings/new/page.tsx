@@ -12,13 +12,14 @@ export default async function NewBookingPage() {
   await dbConnect();
 
   const facilitiesRaw = await Facility.find({})
-    .select("name venues")
+    .select("name venues managerIds")
     .lean();
 
   // Convert ObjectId to string for client safety
   const facilities = facilitiesRaw.map(f => ({
     _id: f._id.toString(),
     name: f.name,
+    managerIds: f.managerIds?.map((id: any) => id.toString()) || [],
     venues: f.venues.map((v: any) => ({
       _id: v._id.toString(),
       name: v.name,

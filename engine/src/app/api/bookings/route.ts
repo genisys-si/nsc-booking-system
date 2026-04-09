@@ -4,9 +4,8 @@ import dbConnect from '@/lib/db';
 import Booking from '@/models/Booking';
 import Facility from '@/models/Facility';
 import Settings from '@/models/Settings';
-import { isVenueAvailable } from '@/lib/availability';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import nodemailer from 'nodemailer';
+import { sendBookingNotifications } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -34,14 +33,15 @@ export async function POST(req: NextRequest) {
     contactName,
     contactEmail,
     notes,
+    skipAvailabilityCheck = false, // For testing, default to false to enforce availability check
   } = body;
 
   // Support both `amenities` and `selectedAmenities` from clients
   const amenities = Array.isArray(body.amenities)
     ? body.amenities
     : Array.isArray(body.selectedAmenities)
-    ? body.selectedAmenities
-    : [];
+      ? body.selectedAmenities
+      : [];
 
   if (!facilityId || !venueId || !startTime || !endTime || !contactName || !contactEmail) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -57,12 +57,14 @@ export async function POST(req: NextRequest) {
   // Load settings once for booking policy validation and email sending
   const settings = await Settings.findOne().lean();
 
+  // ── Booking Policies ──────────────────────────────────────────────────────
+
   // Check minimum lead time policy
   if (settings?.bookingPolicies?.minLeadTimeHours) {
     const minLeadTime = new Date(Date.now() + settings.bookingPolicies.minLeadTimeHours * 60 * 60 * 1000);
     if (start < minLeadTime) {
-      return NextResponse.json({ 
-        error: `Booking must be made at least ${settings.bookingPolicies.minLeadTimeHours} hours in advance` 
+      return NextResponse.json({
+        error: `Booking must be made at least ${settings.bookingPolicies.minLeadTimeHours} hours in advance`
       }, { status: 400 });
     }
   }
@@ -79,29 +81,58 @@ export async function POST(req: NextRequest) {
   const durationMs = end.getTime() - start.getTime();
   const hours = durationMs / (1000 * 60 * 60);
   if (settings?.bookingPolicies?.maxDurationHours && hours > settings.bookingPolicies.maxDurationHours) {
-    return NextResponse.json({ 
-      error: `Booking duration cannot exceed ${settings.bookingPolicies.maxDurationHours} hours` 
+    return NextResponse.json({
+      error: `Booking duration cannot exceed ${settings.bookingPolicies.maxDurationHours} hours`
     }, { status: 400 });
   }
 
-  // Check availability with optional buffer time
-  const bufferMs = (settings?.bookingPolicies?.bufferMinutes || 0) * 60 * 1000;
-  const bufferedStart = new Date(start.getTime() - bufferMs);
-  const bufferedEnd = new Date(end.getTime() + bufferMs);
-  const available = await isVenueAvailable(venueId.toString(), bufferedStart, bufferedEnd);
-  if (!available) {
-    return NextResponse.json({ error: 'Time slot overlaps with existing booking' }, { status: 409 });
+  // ── Availability check with buffer time ───────────────────────────────────
+  if (!skipAvailabilityCheck) {
+    const bufferMs = (settings?.bookingPolicies?.bufferMinutes || 0) * 60 * 1000;
+    const bufferedStart = new Date(start.getTime() - bufferMs);
+    const bufferedEnd = new Date(end.getTime() + bufferMs);
+
+    const overlapping = await Booking.findOne({
+      venueId,
+      status: { $in: ['pending', 'confirmed'] },
+      $and: [
+        { startTime: { $lt: bufferedEnd } },
+        { endTime: { $gt: bufferedStart } },
+      ],
+    });
+
+    if (overlapping) {
+      console.error('❌ OVERLAP DETECTED!');
+      console.error('   Existing booking:', {
+        id: overlapping._id,
+        start: overlapping.startTime.toISOString(),
+        end: overlapping.endTime.toISOString(),
+      });
+      return NextResponse.json({
+        error: 'Time slot overlaps with existing booking',
+        message: 'This venue is already booked during your selected time',
+        conflictingBookingId: overlapping._id.toString(),
+      }, { status: 409 });
+    }
+    console.log('✅ No overlapping confirmed bookings found');
+  } else {
+    console.log('⚠️ AVAILABILITY CHECK SKIPPED (for testing)');
   }
 
-  const basePrice = hours * (venue.pricePerHour || 0);
+  // ── Pricing ───────────────────────────────────────────────────────────────
+  // Use venue pricePerHour; fall back to settings defaultPricePerHour
+  const pricePerHour = (venue.pricePerHour ?? 0) > 0
+    ? venue.pricePerHour
+    : (settings?.defaultPricing?.defaultPricePerHour ?? 0);
 
-  
+  const basePrice = hours * pricePerHour;
+
   let amenitySurcharge = 0;
   const validSelectedAmenities: string[] = [];
 
   if (amenities.length > 0 && venue.amenities?.length > 0) {
     for (const amenityId of amenities) {
-      const amenity = venue.amenities.find((a: any) => a._id.toString() === amenityId.toString()); 
+      const amenity = venue.amenities.find((a: any) => a._id.toString() === amenityId.toString());
 
       if (amenity && typeof amenity.surcharge === 'number') {
         amenitySurcharge += amenity.surcharge;
@@ -110,9 +141,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const totalPrice = basePrice + amenitySurcharge;
+  // Apply tax from settings
+  const taxPercent = settings?.defaultPricing?.taxPercent ?? 0;
+  const subtotal = basePrice + amenitySurcharge;
+  const taxAmount = Math.round(subtotal * (taxPercent / 100) * 100) / 100;
+  const totalPrice = subtotal + taxAmount;
 
-
+  // Currency from settings (fallback SBD)
+  const currency = settings?.currency || 'SBD';
 
   // Generate a short human-friendly booking reference
   const bookingRef = `BK-${Date.now().toString(36).toUpperCase()}`;
@@ -129,59 +165,22 @@ export async function POST(req: NextRequest) {
     contactEmail,
     notes,
     status: 'pending',
-    amenities: validSelectedAmenities, // now saved correctly
+    amenities: validSelectedAmenities,
     basePrice,
     amenitySurcharge,
+    taxAmount,
     totalPrice,
     invoiceId: `INV-${Date.now().toString(36).toUpperCase()}`,
     bookingRef,
     paymentStatus: 'pending',
   });
 
-  // Send booking confirmation email if enabled in Settings
-  if (settings?.notifications?.emailEnabled && settings?.smtp?.host) {
-    try {
-      const renderTemplate = (tpl: string, vars: Record<string, string>) => {
-        if (!tpl) return '';
-        return tpl.replace(/{{\s*([a-zA-Z0-9_\.]+)\s*}}/g, (_, key) => {
-          return (vars[key] ?? '') as string;
-        });
-      };
-
-      const dashboardUrl = `${settings?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard/bookings/${booking._id}`;
-
-      const subject = renderTemplate(settings?.templates?.bookingConfirmationSubject || 'Booking confirmation', {
-        bookingRef,
-        venueName: venue.name || '',
-        userName: contactName,
-      });
-
-      const html = renderTemplate(settings?.templates?.bookingConfirmationHtml || '<p>Your booking is confirmed</p>', {
-        bookingRef,
-        venueName: venue.name || '',
-        userName: contactName,
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
-        dashboardUrl,
-        totalPrice: totalPrice.toFixed(2),
-      });
-
-      const transporter = nodemailer.createTransport({
-        host: settings.smtp.host,
-        port: settings.smtp.port,
-        secure: !!settings.smtp.secure,
-        auth: settings.smtp.user ? { user: settings.smtp.user, pass: settings.smtp.pass } : undefined,
-      });
-
-      await transporter.sendMail({
-        from: settings.smtp.from || settings.smtp.user,
-        to: contactEmail,
-        subject,
-        html,
-      });
-    } catch (err) {
-      console.error('Failed to send booking confirmation email:', err);
-    }
+  // Send booking notifications — respects emailEnabled + bookingCreated event flag
+  const venueName = venue.name || 'Unknown Venue';
+  try {
+    await sendBookingNotifications(booking, venueName);
+  } catch (err) {
+    console.error('Failed to send booking notification emails:', err);
   }
 
   return NextResponse.json({
@@ -193,11 +192,14 @@ export async function POST(req: NextRequest) {
       hours: hours.toFixed(2),
       basePrice: basePrice.toFixed(2),
       amenitySurcharge: amenitySurcharge.toFixed(2),
+      taxPercent,
+      taxAmount: taxAmount.toFixed(2),
       totalPrice: totalPrice.toFixed(2),
-      currency: 'SBD',
+      currency,
     },
   }, { status: 201, headers: { 'Access-Control-Allow-Origin': '*' } });
 }
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   // Allow session or JWT-provided user via middleware `x-user`
@@ -205,7 +207,7 @@ export async function GET(req: NextRequest) {
   try {
     const xu = req.headers.get('x-user');
     if (xu) xUser = JSON.parse(xu);
-  } catch (e) {}
+  } catch (e) { }
 
   if (!session?.user && !xUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -238,7 +240,7 @@ export async function GET(req: NextRequest) {
     .sort({ startTime: -1 })
     .lean();
 
-    // Map to ensure paymentStatus is always included
+  // Map to ensure paymentStatus is always included
   const mappedBookings = bookings.map((b: any) => ({
     ...b,
     paymentStatus: b.paymentStatus || 'pending',
@@ -251,5 +253,4 @@ export async function GET(req: NextRequest) {
   }));
 
   return NextResponse.json(withRefs);
-
 }

@@ -5,7 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,7 @@ interface BookingCreateFormProps {
   facilities: Array<{
     _id: string;
     name: string;
+    managerIds?: string[];
     venues: Array<{
       _id: string;
       name: string;
@@ -40,6 +42,7 @@ interface BookingCreateFormProps {
 
 export default function BookingCreateForm({ facilities }: BookingCreateFormProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [selectedFacility, setSelectedFacility] = useState<string>("");
   const [selectedVenue, setSelectedVenue] = useState<string>("");
   const [pricePreview, setPricePreview] = useState({
@@ -49,6 +52,25 @@ export default function BookingCreateForm({ facilities }: BookingCreateFormProps
     totalPrice: 0,
   });
 
+  // Filter facilities based on user role
+  const managedFacilities = useMemo(() => {
+    if (!session?.user) return [];
+
+    if (session.user.role === "admin") {
+      return facilities; // Admin sees everything
+    }
+
+    if (session.user.role === "manager") {
+      const userId = session.user.id;
+      return facilities.filter(f => 
+        Array.isArray(f.managerIds) && f.managerIds.includes(userId)
+      );
+    }
+
+    return []; // Other roles see nothing
+  }, [facilities, session]);
+
+  console.log("Managed Facilities for user:", managedFacilities);
   const form = useForm<FormData>({
     resolver: zodResolver(bookingSchema) as any,
     defaultValues: {
@@ -66,7 +88,7 @@ export default function BookingCreateForm({ facilities }: BookingCreateFormProps
   });
 
   // Safe selection
-  const selectedFac = facilities.find(f => f._id === selectedFacility) ?? null;
+  const selectedFac = managedFacilities.find(f => f._id === selectedFacility) ?? null;
   const selectedVen = selectedFac?.venues?.find(v => v._id.toString() === selectedVenue) ?? null;
 
   // Watch fields
@@ -149,9 +171,9 @@ export default function BookingCreateForm({ facilities }: BookingCreateFormProps
             className="w-full border rounded-md p-2"
           >
             <option value="">
-              {facilities.length === 0 ? "No facilities available" : "Select facility"}
+              {managedFacilities.length === 0 ? "No facilities available" : "Select facility"}
             </option>
-            {facilities.map(f => (
+            {managedFacilities.map(f => (
               <option key={f._id} value={f._id}>
                 {f.name}
               </option>

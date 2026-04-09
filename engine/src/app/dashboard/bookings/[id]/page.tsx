@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import BookingActions from "@/components/booking/BookingActions";
 import BookingApprovalActions from "@/components/booking/BookingApprovalActions";
 import BookingPaymentActions from "@/components/booking/BookingPaymentActions";
+import BookingEditModal from "@/components/booking/BookingEditModal";
 
 
 export default async function BookingDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -95,6 +96,18 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
         .filter(Boolean) as { name: string; surcharge: number }[];
     }
   }
+
+  // Build the full list of venue amenities for the edit modal
+  const venueForEdit = booking.facilityId?.venues?.find(
+    (v: any) => v._id.toString() === booking.venueId
+  );
+  const availableAmenities: { _id: string; name: string; surcharge: number }[] =
+    (venueForEdit?.amenities || []).map((a: any) => ({
+      _id: a._id.toString(),
+      name: a.name,
+      surcharge: a.surcharge || 0,
+    }));
+  const pricePerHour: number = venueForEdit?.pricePerHour || 0;
 
   const isAuthorized = session.user.role === "admin" || session.user.role === "manager";
 
@@ -312,6 +325,21 @@ export default async function BookingDetailPage({ params: paramsPromise }: { par
           {/* Action Buttons */}
           {isAuthorized && (
             <div className="space-y-4">
+              <BookingEditModal
+                bookingId={booking._id}
+                venueId={booking.venueId}
+                currentStartTime={booking.startTime}
+                currentEndTime={booking.endTime}
+                currentAmenityIds={booking.selectedAmenities || []}
+                availableAmenities={availableAmenities}
+                pricePerHour={pricePerHour}
+                isAuthorized={isAuthorized}
+                currentContactName={booking.contactName || ""}
+                currentContactEmail={booking.contactEmail || ""}
+                currentAttendees={booking.attendees}
+                currentPurpose={booking.purpose}
+                currentNotes={booking.notes}
+              />
 
               <BookingApprovalActions
                 bookingId={booking._id}

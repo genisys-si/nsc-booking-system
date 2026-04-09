@@ -1,4 +1,4 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ISMTPSettings {
   host?: string;
@@ -7,6 +7,47 @@ export interface ISMTPSettings {
   user?: string;
   pass?: string;
   from?: string;
+}
+
+export interface ISettings extends Document {
+  smtp: ISMTPSettings;
+  appUrl?: string;
+  templates?: {
+    resetEmailSubject?: string;
+    resetEmailHtml?: string;
+    bookingConfirmationSubject?: string;
+    bookingConfirmationHtml?: string;
+    paymentReceiptSubject?: string;
+    paymentReceiptHtml?: string;
+  };
+  notifications?: {
+    emailEnabled?: boolean;
+    smsEnabled?: boolean;
+    events?: {
+      bookingCreated?: boolean;
+      bookingConfirmed?: boolean;
+      bookingCancelled?: boolean;
+    };
+  };
+  bookingPolicies?: {
+    cancellationWindowHours?: number;
+    maxDurationHours?: number;
+    minLeadTimeHours?: number;
+    bufferMinutes?: number;
+  };
+  timezone?: string;
+  locale?: string;
+  currency?: string;
+  paymentGateway?: {
+    provider?: string;
+    apiKey?: string;
+    testMode?: boolean;
+  };
+  defaultPricing?: {
+    defaultPricePerHour?: number;
+    taxPercent?: number;
+  };
+  smtpDebug?: boolean;
 }
 
 const settingsSchema = new Schema({
@@ -65,4 +106,5 @@ const settingsSchema = new Schema({
   smtpDebug: { type: Boolean, default: false },
 }, { timestamps: true });
 
-export default mongoose.models.Settings || mongoose.model('Settings', settingsSchema);
+export default mongoose.models.Settings || mongoose.model<ISettings>('Settings', settingsSchema);
+

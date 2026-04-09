@@ -26,8 +26,9 @@ export interface IBooking extends Document {
   status: 'pending' | 'confirmed' | 'cancelled' | 'rejected';
   amenities?: mongoose.Types.ObjectId[]; // array of amenity _ids
   basePrice?: number;  // calculated base (hours * pricePerHour)
-  amenitySurcharge?: number;  //sum of amenity surcharges
-  totalPrice?: number;  // base + surcharge
+  amenitySurcharge?: number;  // sum of amenity surcharges
+  taxAmount?: number;  // tax amount applied at time of booking (from settings.defaultPricing.taxPercent)
+  totalPrice?: number;  // base + surcharge + tax
   invoiceId?: string;  //unique ID for receipt
   bookingRef?: string; // human-friendly booking reference
   purpose?: string;
@@ -63,8 +64,9 @@ const bookingSchema = new Schema<IBooking>({
   notes: String,
   amenities: [{ type: Schema.Types.ObjectId, ref: 'Amenity' }],
   basePrice: { type: Number, default: 0 },  // calculated base (hours * pricePerHour)
-  amenitySurcharge: { type: Number, default: 0 },  //sum of amenity surcharges
-  totalPrice: { type: Number, default: 0 },  // base + surcharge
+  amenitySurcharge: { type: Number, default: 0 },  // sum of amenity surcharges
+  taxAmount: { type: Number, default: 0 },  // tax amount from settings.defaultPricing.taxPercent
+  totalPrice: { type: Number, default: 0 },  // base + surcharge + tax
   invoiceId: String,  //unique ID for receipt
   bookingRef: { type: String, index: true, unique: true, sparse: true },
   statusHistory: [{

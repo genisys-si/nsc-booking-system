@@ -8,8 +8,10 @@ import { columns } from "@/components/dashboard/booking-columns";
 import BookingFilters from "@/components/dashboard/BookingFilters";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Download } from "lucide-react";
 import { Suspense } from "react";
+
+const PAGE_SIZE = 15;
 
 export default async function BookingsPage({
   searchParams: searchParamsPromise,
@@ -34,6 +36,7 @@ export default async function BookingsPage({
     }
   }
 
+  // Apply filters from URL
   if (searchParams.status) filter.status = searchParams.status;
   if (searchParams.venueId) filter.venueId = searchParams.venueId;
   if (searchParams.startDate) {
@@ -43,16 +46,23 @@ export default async function BookingsPage({
     filter.endTime = { $lte: new Date(searchParams.endDate as string) };
   }
 
+  const page = parseInt((searchParams.page as string) || "1");
+  const skip = (page - 1) * PAGE_SIZE;
+
+  // Get total count for pagination
+  const totalBookings = await Booking.countDocuments(filter);
+
   const bookingsRaw = await Booking.find(filter)
     .populate("userId", "name email")
     .populate("facilityId", "name venues")
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(PAGE_SIZE)
     .lean();
-
-  
 
   const bookings = bookingsRaw.map(b => ({
     _id: b._id.toString(),
+    bookingRef: b.bookingRef,
     userId: b.userId ? { name: b.userId.name, email: b.userId.email } : null,
     facilityId: b.facilityId ? { name: b.facilityId.name } : null,
     venueId: b.venueId.toString(),
@@ -72,12 +82,9 @@ export default async function BookingsPage({
     amenitySurcharge: b.amenitySurcharge,
     totalPrice: b.totalPrice,
     invoiceId: b.invoiceId,
-    bookingRef: b.bookingRef || null,
     paymentStatus: b.paymentStatus || 'pending',
     createdAt: b.createdAt.toISOString(),
   }));
-
-  console.log(bookings);
 
   const venueFilterRaw = await Facility.aggregate([
     { $match: session.user.role === "manager" ? { managerIds: session.user.id } : {} },
@@ -97,16 +104,28 @@ export default async function BookingsPage({
     facilityName: v.facilityName,
   }));
 
+  const totalPages = Math.ceil(totalBookings / PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Venue Bookings</h1>
-        <Button asChild>
-          <Link href="/dashboard/bookings/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Booking
-          </Link>
-        </Button>
+        
+        <div className="flex gap-3">
+          <Button asChild>
+            <Link href="/dashboard/bookings/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Create New Booking
+            </Link>
+          </Button>
+
+          <Button variant="outline" asChild>
+            <a href={`/api/bookings/export?${new URLSearchParams(searchParams as any)}`} download>
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </a>
+          </Button>
+        </div>
       </div>
 
       <Suspense fallback={<div className="h-10 bg-muted animate-pulse rounded-md" />}>
@@ -118,7 +137,20 @@ export default async function BookingsPage({
           No bookings found matching the filters.
         </div>
       ) : (
-        <DataTable columns={columns} data={bookings}  />
+        <>
+          <DataTable 
+            columns={columns} 
+            data={bookings} 
+            pagination={{
+              page,
+              totalPages,
+              totalItems: totalBookings,
+              pageSize: PAGE_SIZE,
+            }}
+          />
+
+         
+        </>
       )}
     </div>
   );

@@ -19,8 +19,10 @@ interface BookingForInvoice {
   contactEmail: string;
   basePrice: number;
   amenitySurcharge: number;
+  taxAmount?: number;
   totalPrice: number;
   pricePerHour?: number;
+  currency?: string;
   selectedAmenities?: Array<{ name: string; surcharge: number }>;
 }
 
@@ -59,6 +61,7 @@ const styles = StyleSheet.create({
 
 // The PDF document component (this is the root)
 function InvoiceDocument({ booking }: { booking: BookingForInvoice }) {
+  const currency = booking.currency || 'SBD';
   const start = new Date(booking.startTime);
   const end = new Date(booking.endTime);
   const hours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
@@ -104,21 +107,28 @@ function InvoiceDocument({ booking }: { booking: BookingForInvoice }) {
           <Text style={{ fontSize: 14, marginBottom: 6 }}>Pricing Summary</Text>
           <View style={styles.row}>
             <Text>
-              Base Price ({hours} hours @ SBD {booking.pricePerHour || '—'}/hr):
+              Base Price ({hours} hours @ {currency} {booking.pricePerHour || '—'}/hr):
             </Text>
-            <Text>SBD {booking.basePrice.toFixed(2)}</Text>
+            <Text>{currency} {booking.basePrice.toFixed(2)}</Text>
           </View>
 
           {booking.selectedAmenities && booking.selectedAmenities.length > 0 && (
             <View style={styles.row}>
               <Text>Amenity Surcharge:</Text>
-              <Text>SBD {booking.amenitySurcharge.toFixed(2)}</Text>
+              <Text>{currency} {booking.amenitySurcharge.toFixed(2)}</Text>
+            </View>
+          )}
+
+          {(booking.taxAmount ?? 0) > 0 && (
+            <View style={styles.row}>
+              <Text>Tax:</Text>
+              <Text>{currency} {(booking.taxAmount ?? 0).toFixed(2)}</Text>
             </View>
           )}
 
           <View style={styles.row}>
             <Text style={styles.bold}>Total:</Text>
-            <Text style={styles.bold}>SBD {booking.totalPrice.toFixed(2)}</Text>
+            <Text style={styles.bold}>{currency} {booking.totalPrice.toFixed(2)}</Text>
           </View>
         </View>
 

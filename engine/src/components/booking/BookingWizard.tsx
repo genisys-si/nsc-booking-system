@@ -166,7 +166,7 @@ export function BookingWizard() {
       try {
         const res = await fetch(`/api/availability?venueId=${venueId}&startTime=${start.toISOString()}&endTime=${end.toISOString()}`);
         const data = await res.json();
-        setAvailability({ loading: false, available: data.available, message: data.available ? "Available" : "Booked" });
+        setAvailability({ loading: false, available: data.available, message: data.available ? "Available" : "Slot is Booked" });
       } catch {
         setAvailability({ loading: false, available: false, message: "Error" });
       }
@@ -359,7 +359,7 @@ function StepDateTime({ form, bookedDates, availability }: any) {
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <Label>Start Date</Label>
+          <Label className="py-2">Start Date</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-full justify-start text-left">
@@ -379,7 +379,7 @@ function StepDateTime({ form, bookedDates, availability }: any) {
           </Popover>
         </div>
         <div>
-          <Label>End Date</Label>
+          <Label className="py-2">End Date</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-full justify-start text-left">
@@ -402,21 +402,21 @@ function StepDateTime({ form, bookedDates, availability }: any) {
       {/* ... rest of the component remains the same ... */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <Label>Start Time</Label>
+          <Label className="py-2">Start Time</Label>
           <Select onValueChange={v => form.setValue("startTime", v)} value={startTime}>
             <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
             <SelectContent>{TIME_SLOTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>End Time</Label>
+          <Label className="py-2">End Time</Label>
           <Select onValueChange={v => form.setValue("endTime", v)} value={form.watch("endTime")} disabled={!startTime}>
             <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
             <SelectContent>{filteredEndTimeSlots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
-      <div className={cn("p-4 rounded-lg border text-center font-medium", availability.available ? "border-green-300 bg-green-50 text-green-800" : "bg-gray-50")}>
+      <div className={cn("p-4 rounded-lg border text-center font-medium", availability.available ? "border-green-300 bg-green-50 text-green-800" : "bg-slate-50 text-slate-500")}>
         {availability.message || "Select slot"}
       </div>
     </div>
@@ -447,9 +447,9 @@ function StepExtras({ form, facilities }: any) {
           </div>
         </div>
       )}
-      <div><Label>Attendees</Label><Input type="number" {...form.register("attendees", { valueAsNumber: true })} /></div>
-      <div><Label>Purpose</Label><Input {...form.register("purpose")} /></div>
-      <div><Label>Notes</Label><Textarea {...form.register("notes")} /></div>
+      <div><Label className="py-2">Attendees</Label><Input type="number" {...form.register("attendees", { valueAsNumber: true })} /></div>
+      <div><Label className="py-2">Purpose</Label><Input {...form.register("purpose")} /></div>
+      <div><Label className="py-2">Notes</Label><Textarea {...form.register("notes")} /></div>
     </div>
   );
 }
@@ -461,9 +461,9 @@ function StepExtras({ form, facilities }: any) {
 function StepInfo({ form }: any) {
   return (
     <div className="space-y-6">
-      <div><Label>Full Name</Label><Input {...form.register("contactName")} /></div>
-      <div><Label>Email</Label><Input type="email" {...form.register("contactEmail")} /></div>
-      <div><Label>Phone (optional)</Label><Input {...form.register("contactPhone")} /></div>
+      <div><Label className="py-2">Full Name</Label><Input {...form.register("contactName")} /></div>
+      <div><Label className="py-2">Email</Label><Input type="email" {...form.register("contactEmail")} /></div>
+      <div><Label className="py-2">Phone (optional)</Label><Input {...form.register("contactPhone")} /></div>
     </div>
   );
 }

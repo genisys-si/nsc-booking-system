@@ -26,8 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 // ───────────────────────────────────────────────
 
 export interface Amenity { _id: string; name: string; surcharge: number; }
-export interface Venue { _id: string; name: string; pricePerHour: number; photo?: string; amenities: Amenity[]; }
-export interface Facility { _id: string; name: string; photo?: string; venues: Venue[]; }
+export interface Venue { _id: string; name: string; pricePerHour: number; images?: string[]; amenities: Amenity[]; isBookable: boolean; }
+export interface Facility { _id: string; name: string; coverImage?: string; venues: Venue[]; }
 export type AvailabilityState = { loading: boolean; available: boolean | null; message: string; };
 export type PricePreview = { hours: number; base: number; amenities: number; total: number; };
 export type BookingResult = { invoiceId?: string; _id?: string; [key: string]: any; };
@@ -92,6 +92,7 @@ type WizardData = z.infer<typeof wizardSchema>;
 export function BookingWizard() {
   const [step, setStep] = useState(1);
   const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [loadingFacilities, setLoadingFacilities] = useState(true);
   const [loadingVenues, setLoadingVenues] = useState(false);
   const [bookedDates, setBookedDates] = useState<Date[]>([]);
@@ -109,20 +110,30 @@ export function BookingWizard() {
 
   const { watch, setValue, trigger, handleSubmit, getValues } = form;
 
-  // Load facilities
+  // Load facilities and settings
   useEffect(() => {
     setLoadingFacilities(true);
+    
+    // Fetch facilities
     fetch("/api/facilities/public")
       .then(res => res.json())
       .then(data => {
         setFacilities(data);
-        setLoadingFacilities(false);
         console.log("Loaded facilities:", data);
       })
       .catch(() => {
         toast.error("Failed to load facilities");
-        setLoadingFacilities(false);
-      });
+      })
+      .finally(() => setLoadingFacilities(false));
+
+    // Fetch public settings for policies (lead time, etc.)
+    fetch("/api/settings")
+      .then(res => res.json())
+      .then(data => {
+        setSettings(data);
+        console.log("Loaded settings:", data);
+      })
+      .catch(err => console.error("Failed to load settings:", err));
   }, []);
 
   // Load booked dates
@@ -207,9 +218,23 @@ export function BookingWizard() {
 
     const isValid = await trigger(fields);
     if (!isValid) return;
-    if (step === 3 && !availability.available) {
-      toast.error("Time slot not available");
-      return;
+
+    if (step === 3) {
+      if (!availability.available) {
+        toast.error("Time slot not available");
+        return;
+      }
+      
+      // Check lead time client-side if settings available
+      const { startDate, startTime } = watch();
+      const start = new Date(`${format(startDate, "yyyy-MM-dd")}T${to24h(startTime)}`);
+      const minLeadHours = settings?.bookingPolicies?.minLeadTimeHours || 2;
+      const minTime = new Date(Date.now() + minLeadHours * 60 * 60 * 1000);
+      
+      if (start < minTime) {
+        toast.error(`Booking must be made at least ${minLeadHours} hours in advance`);
+        return;
+      }
     }
     setStep(step + 1);
   };
@@ -218,22 +243,31 @@ export function BookingWizard() {
 
   const onSubmit = async (data: WizardData) => {
     try {
+      const startTimeISO = new Date(`${format(data.startDate!, "yyyy-MM-dd")}T${to24h(data.startTime)}`).toISOString();
+      const endTimeISO = new Date(`${format(data.endDate!, "yyyy-MM-dd")}T${to24h(data.endTime)}`).toISOString();
+
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          startTime: `${format(data.startDate!, "yyyy-MM-dd")}T${to24h(data.startTime)}`,
-          endTime: `${format(data.endDate!, "yyyy-MM-dd")}T${to24h(data.endTime)}`,
+          startTime: startTimeISO,
+          endTime: endTimeISO,
         }),
       });
-      if (!res.ok) throw new Error();
+      
       const result = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(result.error || result.message || "Submission failed");
+      }
+
       setBookingResult(result.booking || result.data || result);
       setStep(7);
       toast.success("Booking submitted!");
-    } catch {
-      toast.error("Submission failed");
+    } catch (err: any) {
+      console.error("Submission error:", err);
+      toast.error(err.message || "Submission failed");
     }
   };
 
@@ -328,18 +362,33 @@ function StepFacility({ form, facilities, loading, setStep }: any) {
 
 function StepVenue({ form, facilities, setStep }: any) {
   const selectedFacility = facilities.find((f: any) => f._id === form.watch("facilityId"));
+  const venues = (selectedFacility?.venues || []).filter((v: any) => v.isBookable);
+
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-4"><Button variant="ghost" size="sm" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4 mr-1" /> Back</Button><h2 className="text-xl font-semibold">{selectedFacility?.name}</h2></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {selectedFacility?.venues.map((venue: any) => (
-          
-          <Card key={venue._id} className={cn("cursor-pointer overflow-hidden transition-all hover:shadow-lg", form.watch("venueId") === venue._id && "ring-2 ring-primary")} onClick={() => { form.setValue("venueId", venue._id); setStep(3); }}>
-            <div className="relative h-48">{venue.images && venue.images.length > 0 ? <Image src={venue.images[0]} alt={venue.name} fill className="object-cover" /> : <div className="h-full bg-muted flex items-center justify-center">No photo</div>}</div>
-            <CardContent className="p-4"><h3 className="font-semibold">{venue.name}</h3><p className="text-sm text-muted-foreground mt-1">${venue.pricePerHour}/hr</p></CardContent>
-          </Card>
-        ))}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4 mr-1" /> Back</Button>
+        <div>
+          <h2 className="text-xl font-semibold">{selectedFacility?.name}</h2>
+          <p className="text-sm text-muted-foreground">Select an available venue</p>
+        </div>
       </div>
+      
+      {venues.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg bg-muted/20">
+          <p className="text-muted-foreground">No bookable venues found in this facility.</p>
+          <Button variant="link" onClick={() => setStep(1)} className="mt-2">Choose another facility</Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {venues.map((venue: any) => (
+            <Card key={venue._id} className={cn("cursor-pointer overflow-hidden transition-all hover:shadow-lg", form.watch("venueId") === venue._id && "ring-2 ring-primary")} onClick={() => { form.setValue("venueId", venue._id); setStep(3); }}>
+              <div className="relative h-48">{venue.images && venue.images.length > 0 ? <Image src={venue.images[0]} alt={venue.name} fill className="object-cover" /> : <div className="h-full bg-muted flex items-center justify-center">No photo</div>}</div>
+              <CardContent className="p-4"><h3 className="font-semibold">{venue.name}</h3><p className="text-sm text-muted-foreground mt-1">${venue.pricePerHour}/hr</p></CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

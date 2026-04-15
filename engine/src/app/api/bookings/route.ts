@@ -44,13 +44,20 @@ export async function POST(req: NextRequest) {
       : [];
 
   if (!facilityId || !venueId || !startTime || !endTime || !contactName || !contactEmail) {
+    console.error('❌ Missing required fields:', { facilityId, venueId, startTime, endTime, contactName, contactEmail });
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
   const start = new Date(startTime);
   const end = new Date(endTime);
 
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    console.error('❌ Invalid dates provided:', { startTime, endTime });
+    return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+  }
+
   if (end <= start) {
+    console.error('❌ End time before start time:', { start: start.toISOString(), end: end.toISOString() });
     return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
   }
 
@@ -63,26 +70,41 @@ export async function POST(req: NextRequest) {
   if (settings?.bookingPolicies?.minLeadTimeHours) {
     const minLeadTime = new Date(Date.now() + settings.bookingPolicies.minLeadTimeHours * 60 * 60 * 1000);
     if (start < minLeadTime) {
+      console.error('❌ Policy Violation: Minimum lead time not met', { 
+        start: start.toISOString(), 
+        minLeadTime: minLeadTime.toISOString(),
+        requiredHours: settings.bookingPolicies.minLeadTimeHours 
+      });
       return NextResponse.json({
-        error: `Booking must be made at least ${settings.bookingPolicies.minLeadTimeHours} hours in advance`
+        error: `Booking must be made at least ${settings.bookingPolicies.minLeadTimeHours} hours in advance`,
+        type: 'POLICY_VIOLATION'
       }, { status: 400 });
     }
   }
 
   const facility = await Facility.findById(facilityId);
-  if (!facility) return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+  if (!facility) {
+    console.error('❌ Facility not found:', facilityId);
+    return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+  }
 
   const venue = facility.venues.id(venueId);
   if (!venue || !venue.isBookable) {
-    return NextResponse.json({ error: 'Venue not found or not bookable' }, { status: 400 });
+    console.error('❌ Venue not found or not bookable:', { venueId, isBookable: venue?.isBookable });
+    return NextResponse.json({ 
+      error: venue ? 'Venue is currently not available for booking' : 'Venue not found',
+      type: venue ? 'VENUE_UNAVAILABLE' : 'NOT_FOUND'
+    }, { status: 400 });
   }
 
   // Check maximum duration policy
   const durationMs = end.getTime() - start.getTime();
   const hours = durationMs / (1000 * 60 * 60);
   if (settings?.bookingPolicies?.maxDurationHours && hours > settings.bookingPolicies.maxDurationHours) {
+    console.error('❌ Policy Violation: Maximum duration exceeded', { hours, max: settings.bookingPolicies.maxDurationHours });
     return NextResponse.json({
-      error: `Booking duration cannot exceed ${settings.bookingPolicies.maxDurationHours} hours`
+      error: `Booking duration cannot exceed ${settings.bookingPolicies.maxDurationHours} hours`,
+      type: 'POLICY_VIOLATION'
     }, { status: 400 });
   }
 
@@ -102,11 +124,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (overlapping) {
-      console.error('❌ OVERLAP DETECTED!');
-      console.error('   Existing booking:', {
-        id: overlapping._id,
-        start: overlapping.startTime.toISOString(),
-        end: overlapping.endTime.toISOString(),
+      console.error('❌ OVERLAP DETECTED!', {
+        requested: { start: start.toISOString(), end: end.toISOString() },
+        existing: { id: overlapping._id, start: overlapping.startTime.toISOString(), end: overlapping.endTime.toISOString() }
       });
       return NextResponse.json({
         error: 'Time slot overlaps with existing booking',

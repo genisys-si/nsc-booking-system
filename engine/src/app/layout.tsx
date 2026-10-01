@@ -40,11 +40,7 @@ export default function RootLayout({
           duration={4500}
           theme="system"
           toastOptions={{
-            className: "border border-border rounded-md shadow-lg",
-            style: {
-              background: "hsl(var(--background))",
-              color: "hsl(var(--foreground))",
-            },
+            className: "shadow-lg",
           }}
         />
       </body>

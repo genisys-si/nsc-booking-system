@@ -33,6 +33,16 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       {...props}
+      toastOptions={{
+        ...props.toastOptions,
+        classNames: {
+          toast: "!opacity-100 shadow-lg",
+          title: "font-medium",
+          description: "!text-current/80",
+          closeButton: "!bg-popover !border-border",
+          ...props.toastOptions?.classNames,
+        },
+      }}
     />
   )
 }

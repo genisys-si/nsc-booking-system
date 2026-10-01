@@ -40,7 +40,7 @@ export default function SignInPage() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    const callbackUrl = searchParams.get("callbackUrl") || "/"; // redirect after login
+    const callbackUrl = searchParams.get("callbackUrl") || "/dashboard/bookings"; // redirect after login
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -72,7 +72,7 @@ export default function SignInPage() {
                 description: "Welcome back!",
                 action: {
                     label: "Go to Dashboard",
-                    onClick: () => router.push("/"),
+                    onClick: () => router.push("/dashboard/bookings"),
                 },
             });
 

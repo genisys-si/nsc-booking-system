@@ -13,7 +13,7 @@ export default withAuth(
 
     if (pathname.startsWith("/dashboard")) {
       if (token.role === "user") {
-        return NextResponse.redirect(new URL("/", req.url));
+        return NextResponse.redirect(new URL("/book", req.url));
       }
     }
 

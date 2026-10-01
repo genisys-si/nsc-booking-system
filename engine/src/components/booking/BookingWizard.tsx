@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -470,6 +470,16 @@ function StepVenue({ form, facilities, loading, currency }: { form: WizardForm; 
   const selectedFacility = facilities.find(f => f._id === facilityId);
   const venues = (selectedFacility?.venues || []).filter(v => v.isBookable);
 
+  // Scroll to the venue list after the user picks a facility (not when returning to this step)
+  const venuesRef = useRef<HTMLElement>(null);
+  const scrollToVenues = useRef(false);
+  useEffect(() => {
+    if (!scrollToVenues.current || !venuesRef.current) return;
+    scrollToVenues.current = false;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    venuesRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }, [facilityId]);
+
   if (loading) {
     return (
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -505,7 +515,10 @@ function StepVenue({ form, facilities, loading, currency }: { form: WizardForm; 
                 key={f._id}
                 selected={facilityId === f._id}
                 onClick={() => {
-                  if (facilityId !== f._id) {
+                  if (facilityId === f._id) {
+                    venuesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  } else {
+                    scrollToVenues.current = true;
                     form.setValue("facilityId", f._id, { shouldValidate: true });
                     form.setValue("venueId", "");
                     form.setValue("selectedAmenities", []);
@@ -521,7 +534,7 @@ function StepVenue({ form, facilities, loading, currency }: { form: WizardForm; 
       </section>
 
       {selectedFacility && (
-        <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <section ref={venuesRef} className="scroll-mt-28 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <MapPin className="h-4 w-4" /> Venues at {selectedFacility.name}
           </h3>

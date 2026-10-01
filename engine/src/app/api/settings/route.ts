@@ -7,7 +7,29 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 export async function GET() {
   await dbConnect();
   const s = await Settings.findOne().lean();
-  return NextResponse.json(s || {});
+
+  // Admins get the full document; everyone else only the fields the public booking flow needs
+  // (never SMTP credentials, payment keys or templates)
+  const session = await getServerSession(authOptions);
+  if (session?.user?.role === 'admin') {
+    return NextResponse.json(s || {});
+  }
+
+  return NextResponse.json({
+    currency: s?.currency || 'SBD',
+    timezone: s?.timezone,
+    locale: s?.locale,
+    bookingPolicies: {
+      minLeadTimeHours: s?.bookingPolicies?.minLeadTimeHours,
+      maxDurationHours: s?.bookingPolicies?.maxDurationHours,
+      bufferMinutes: s?.bookingPolicies?.bufferMinutes,
+      cancellationWindowHours: s?.bookingPolicies?.cancellationWindowHours,
+    },
+    defaultPricing: {
+      defaultPricePerHour: s?.defaultPricing?.defaultPricePerHour,
+      taxPercent: s?.defaultPricing?.taxPercent,
+    },
+  });
 }
 
 export async function PATCH(req: NextRequest) {

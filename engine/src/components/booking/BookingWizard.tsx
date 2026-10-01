@@ -318,7 +318,18 @@ export function BookingWizard() {
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <form
+        onSubmit={e => {
+          // Only the review step may submit; Enter on earlier steps just advances
+          if (step < 4) {
+            e.preventDefault();
+            void nextStep();
+            return;
+          }
+          handleSubmit(onSubmit)(e);
+        }}
+        className="space-y-8"
+      >
         <Stepper step={step} onStepClick={goTo} />
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px] items-start">
@@ -351,11 +362,12 @@ export function BookingWizard() {
                   </div>
                 )}
                 {step < 4 ? (
-                  <Button type="button" size="lg" className="ml-auto rounded-full px-8" onClick={nextStep}>
+                  <Button key="continue" type="button" size="lg" className="ml-auto rounded-full px-8" onClick={nextStep}>
                     Continue <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button type="submit" size="lg" className="ml-auto rounded-full px-8" disabled={formState.isSubmitting}>
+                  // Separate key so React mounts a new button instead of flipping the Continue button's type mid-click
+                  <Button key="submit" type="submit" size="lg" className="ml-auto rounded-full px-8" disabled={formState.isSubmitting}>
                     {formState.isSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <>Confirm booking <Check className="h-4 w-4" /></>}
                   </Button>
                 )}

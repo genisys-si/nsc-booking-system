@@ -36,15 +36,17 @@ export function BookingHeader() {
 
         {/* Action Button */}
         <div className="flex items-center gap-4">
-          <Button 
-            asChild 
-            variant="outline" 
-            size="sm" 
-            className="rounded-full border-white text-white bg-transparent hover:bg-white hover:text-[#005ba4] transition-colors"
+          <Button
+            asChild
+            variant="ghost"
+            className="group h-10 rounded-full border border-white/30 bg-white/10 px-4 text-white shadow-sm backdrop-blur-sm transition-all hover:border-white hover:bg-white hover:text-[#005ba4] hover:shadow-md focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#005ba4] active:scale-95"
           >
-            <a href="https://nsc.gov.sb" className="flex items-center gap-2 px-1">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="font-semibold">Back to Website</span>
+            <a href="https://nsc.gov.sb" aria-label="Back to the National Sports Council website">
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+              <span className="text-sm font-semibold">
+                <span className="sm:hidden">Website</span>
+                <span className="hidden sm:inline">Back to website</span>
+              </span>
             </a>
           </Button>
         </div>
